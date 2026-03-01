@@ -33,7 +33,7 @@ const style = {
 const validationSchema = Yup.object().shape({
   name: Yup.string().trim().required("Project name is required"),
   description: Yup.string().trim(),
-  customerId: Yup.number().nullable(),
+  customerId: Yup.number().required("Customer is required").typeError("Customer is required"),
 });
 
 const normalizeToArray = (data) => {
@@ -258,7 +258,12 @@ export default function CreateHelpDeskProjectModal({ open: externalOpen, onClose
                       setFieldValue("customerId", toNumericId(newValue?.id));
                     }}
                     renderInput={(params) => (
-                      <TextField {...params} label="Assigned Customer (Optional)" />
+                      <TextField
+                        {...params}
+                        label="Customer *"
+                        error={touched.customerId && !!errors.customerId}
+                        helperText={touched.customerId && errors.customerId}
+                      />
                     )}
                     noOptionsText="No customers found"
                     loading={customersLoading}

@@ -562,7 +562,7 @@ export default function CreateTicketModal({ fetchItems, currentPage = 1, current
     return [];
   };
 
-  // Fetch project management projects
+  // Fetch project management projects on mount and when modal opens
   useEffect(() => {
     const fetchProjectManagementProjects = async () => {
       try {
@@ -582,13 +582,12 @@ export default function CreateTicketModal({ fetchItems, currentPage = 1, current
         }
       } catch (error) {
         console.error("Error fetching project management projects:", error);
-        toast.error("Failed to fetch projects");
       } finally {
         setLoadingProjects(false);
       }
     };
     fetchProjectManagementProjects();
-  }, []);
+  }, [open]);
 
   // Fetch customers for assign category
   const fetchAssignCustomers = async () => {
@@ -781,8 +780,9 @@ export default function CreateTicketModal({ fetchItems, currentPage = 1, current
   };
 
   const deriveCustomerName = (project) => {
-    // Master projects may use CustomerName (capital C) or customerName
     const candidateNames = [
+      project.ClientName,
+      project.clientName,
       project.CustomerName,
       project.customerName,
       project.customer?.displayName,
@@ -2297,45 +2297,44 @@ export default function CreateTicketModal({ fetchItems, currentPage = 1, current
         open={createProjectModalOpen}
         onClose={() => setCreateProjectModalOpen(false)}
         fetchItems={async (newProject) => {
-          // Refresh project list
-          await refreshProjects();
-          
-          // If a new project was created, select it in the form
+          if (newProject) {
+            const projectId = toNumericId(newProject.id || newProject.Id || newProject.projectId);
+            const customerId = toNumericId(newProject.CustomerId || newProject.customerId || newProject.customerIdNormalized);
+            const projectEntry = {
+              id: projectId,
+              code: newProject.code || newProject.Code || "",
+              name: newProject.name || newProject.Name || "",
+              customerId: customerId,
+              clientName: newProject.clientName || newProject.ClientName || "",
+            };
+            setMasterProjects(prev => {
+              const exists = prev.some(p => toNumericId(p.id || p.Id) === projectId);
+              return exists ? prev : [projectEntry, ...prev];
+            });
+            setAssignProjects(prev => {
+              const exists = prev.some(p => toNumericId(p.id || p.Id) === projectId);
+              return exists ? prev : [projectEntry, ...prev];
+            });
+          }
+
+          refreshProjects();
+
           if (newProject && mainFormikRef.current) {
-            // Wait a bit for state to update and projects to be normalized
             setTimeout(() => {
               if (mainFormikRef.current) {
-                const projectId = newProject.id || newProject.Id || newProject.projectId;
+                const projectId = toNumericId(newProject.id || newProject.Id || newProject.projectId);
                 if (projectId) {
-                  // Find the project in the normalized list to get all normalized fields
-                  const normalizedProjectId = toNumericId(projectId);
-                  const foundProject = normalizedProjects.find(p => 
-                    toNumericId(p.id) === normalizedProjectId
-                  );
-                  
-                  if (foundProject) {
-                    // Set project field using the normalized project
-                    mainFormikRef.current.setFieldValue("projectIds", [foundProject.id]);
-                    
-                    // If customer is not set, try to get it from the project
-                    if (!mainFormikRef.current.values.customerId && foundProject.customerIdNormalized) {
-                      mainFormikRef.current.setFieldValue("customerId", foundProject.customerIdNormalized);
-                    }
-                  } else {
-                    // Fallback: use the projectId directly if not found in normalized list
-                    mainFormikRef.current.setFieldValue("projectIds", [normalizedProjectId]);
-                    
-                    // If customer is not set, try to get it from the newProject
-                    if (!mainFormikRef.current.values.customerId) {
-                      const customerId = newProject.CustomerId || newProject.customerId || newProject.customerIdNormalized;
-                      if (customerId) {
-                        mainFormikRef.current.setFieldValue("customerId", toNumericId(customerId));
-                      }
+                  mainFormikRef.current.setFieldValue("projectIds", [projectId]);
+
+                  if (!mainFormikRef.current.values.customerId) {
+                    const customerId = toNumericId(newProject.CustomerId || newProject.customerId || newProject.customerIdNormalized);
+                    if (customerId) {
+                      mainFormikRef.current.setFieldValue("customerId", customerId);
                     }
                   }
                 }
               }
-            }, 300); // Increased delay to ensure projects are normalized
+            }, 200);
           }
         }}
         showButton={false}
