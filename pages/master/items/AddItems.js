@@ -678,7 +678,15 @@ const validationSchema = Yup.object().shape({
 export default function AddItems({ fetchItems, isPOSSystem, uoms, isGarmentSystem, chartOfAccounts, barcodeEnabled, IsEcommerceWebSiteAvailable }) {
   const [itemCode, setItemCode] = useState(null);
   const [open, setOpen] = React.useState(false);
-  const handleClose = () => setOpen(false);
+  const handleClose = () => {
+    setOpen(false);
+    setSubImages((prev) => {
+      prev.forEach((item) => {
+        if (item.preview) URL.revokeObjectURL(item.preview);
+      });
+      return [];
+    });
+  };
   const [selectedCat, setSelectedCat] = useState();
   const [categoryList, setCategoryList] = useState([]);
   const [subCategoryList, setSubCategoryList] = useState([]);
@@ -688,6 +696,8 @@ export default function AddItems({ fetchItems, isPOSSystem, uoms, isGarmentSyste
   const [tabValue, setTabValue] = useState(0);
   const [selectedImage, setSelectedImage] = useState(null);
   const [selectedFile, setSelectedFile] = useState(null);
+  const [subImages, setSubImages] = useState([]); // { id, preview, file, price, description }
+  const subImageInputRef = useRef(null);
   const [createCategoryOpen, setCreateCategoryOpen] = useState(false);
   const [createSubCategoryOpen, setCreateSubCategoryOpen] = useState(false);
   const [createSupplierOpen, setCreateSupplierOpen] = useState(false);
@@ -890,6 +900,42 @@ export default function AddItems({ fetchItems, isPOSSystem, uoms, isGarmentSyste
     setSelectedFile(null);
   };
 
+  const handleSubImagesUpload = (event) => {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+    const newSubImages = [];
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      if (!file.type.startsWith("image/")) continue;
+      const id = `${Date.now()}_${i}_${Math.random().toString(36).slice(2)}`;
+      newSubImages.push({
+        id,
+        preview: URL.createObjectURL(file),
+        file,
+        price: "",
+        description: "",
+      });
+    }
+    setSubImages((prev) => [...prev, ...newSubImages]);
+    event.target.value = "";
+  };
+
+  const updateSubImageMeta = (id, field, value) => {
+    setSubImages((prev) =>
+      prev.map((item) =>
+        item.id === id ? { ...item, [field]: value } : item
+      )
+    );
+  };
+
+  const removeSubImage = (id) => {
+    setSubImages((prev) => {
+      const item = prev.find((p) => p.id === id);
+      if (item && item.preview) URL.revokeObjectURL(item.preview);
+      return prev.filter((p) => p.id !== id);
+    });
+  };
+
   const handleCategoryCreated = async () => {
     await fetchCategoryList();
   };
@@ -945,6 +991,19 @@ export default function AddItems({ fetchItems, isPOSSystem, uoms, isGarmentSyste
     formData.append("HasSerialNumbers", values.HasSerialNumbers);
     formData.append("IsWebView", values.IsWebView);
     formData.append("ProductImage", selectedFile ? selectedFile : null);
+    (subImages || []).forEach((item) => {
+      if (item.file) formData.append("SubImages", item.file);
+    });
+    const subImagesMeta = (subImages || [])
+      .filter((item) => item.file)
+      .map((item) => {
+        const priceVal = item.price !== "" && item.price != null ? parseFloat(item.price) : NaN;
+        return {
+          price: !isNaN(priceVal) ? priceVal : null,
+          description: item.description?.trim() || null,
+        };
+      });
+    formData.append("SubImagesMeta", JSON.stringify(subImagesMeta));
     if (values.Description && values.Description.trim() !== "") {
       formData.append("Description", values.Description);
     }
@@ -961,6 +1020,12 @@ export default function AddItems({ fetchItems, isPOSSystem, uoms, isGarmentSyste
         if (data.statusCode == 200) {
           toast.success(data.message);
           setOpen(false);
+          setSubImages((prev) => {
+            prev.forEach((item) => {
+              if (item.preview) URL.revokeObjectURL(item.preview);
+            });
+            return [];
+          });
           fetchItems();
         } else {
           toast.error(data.message);
@@ -1689,6 +1754,124 @@ export default function AddItems({ fetchItems, isPOSSystem, uoms, isGarmentSyste
                             </Box>
                           </Grid>
                         )}
+
+                        {/* Sub Images section */}
+                        <Grid item xs={12} sx={{ mt: 3 }}>
+                          <Typography variant="h6" sx={{ mb: 2 }}>
+                            Sub Images
+                          </Typography>
+                          <Button
+                            variant="contained"
+                            component="label"
+                            startIcon={<CloudUploadIcon />}
+                            sx={{ mb: 2 }}
+                          >
+                            Choose Image
+                            <input
+                              ref={subImageInputRef}
+                              type="file"
+                              hidden
+                              accept="image/*"
+                              multiple
+                              onChange={handleSubImagesUpload}
+                            />
+                          </Button>
+                          {subImages.length > 0 ? (
+                            <Grid container spacing={2}>
+                              {subImages.map((item) => (
+                                <Grid item xs={12} sm={6} md={4} key={item.id}>
+                                  <Box
+                                    sx={{
+                                      position: "relative",
+                                      border: "2px solid #e0e0e0",
+                                      borderRadius: "8px",
+                                      overflow: "hidden",
+                                      "&:hover .delete-icon": {
+                                        opacity: 1,
+                                      },
+                                    }}
+                                  >
+                                    <Box
+                                      sx={{
+                                        height: "140px",
+                                        position: "relative",
+                                        backgroundColor: "#f5f5f5",
+                                      }}
+                                    >
+                                      <img
+                                        src={item.preview}
+                                        alt="Sub"
+                                        style={{
+                                          width: "100%",
+                                          height: "100%",
+                                          objectFit: "cover",
+                                        }}
+                                      />
+                                      <IconButton
+                                        className="delete-icon"
+                                        onClick={() => removeSubImage(item.id)}
+                                        sx={{
+                                          position: "absolute",
+                                          top: 5,
+                                          right: 5,
+                                          backgroundColor: "rgba(255, 255, 255, 0.9)",
+                                          opacity: 0,
+                                          transition: "opacity 0.3s",
+                                          "&:hover": {
+                                            backgroundColor: "rgba(255, 255, 255, 1)",
+                                          },
+                                        }}
+                                        size="small"
+                                      >
+                                        <DeleteIcon fontSize="small" color="error" />
+                                      </IconButton>
+                                    </Box>
+                                    <Box sx={{ p: 1.5 }}>
+                                      <TextField
+                                        fullWidth
+                                        size="small"
+                                        label="Price"
+                                        type="number"
+                                        inputProps={{ min: 0, step: 0.01 }}
+                                        value={item.price ?? ""}
+                                        onChange={(e) =>
+                                          updateSubImageMeta(item.id, "price", e.target.value)
+                                        }
+                                        sx={{ mb: 1 }}
+                                      />
+                                      <TextField
+                                        fullWidth
+                                        size="small"
+                                        label="Description"
+                                        multiline
+                                        rows={2}
+                                        value={item.description ?? ""}
+                                        onChange={(e) =>
+                                          updateSubImageMeta(item.id, "description", e.target.value)
+                                        }
+                                      />
+                                    </Box>
+                                  </Box>
+                                </Grid>
+                              ))}
+                            </Grid>
+                          ) : (
+                            <Box
+                              sx={{
+                                border: "2px dashed #ccc",
+                                borderRadius: "8px",
+                                p: 3,
+                                textAlign: "center",
+                                backgroundColor: "#f9f9f9",
+                              }}
+                            >
+                              <CloudUploadIcon sx={{ fontSize: 48, color: "#999", mb: 1 }} />
+                              <Typography variant="body2" color="textSecondary">
+                                No sub images. Click "Choose Image" to add multiple images.
+                              </Typography>
+                            </Box>
+                          )}
+                        </Grid>
                       </Grid>
                     </Box>
                   )}

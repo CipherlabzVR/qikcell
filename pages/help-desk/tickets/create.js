@@ -29,7 +29,7 @@ import AddIcon from "@mui/icons-material/Add";
 import useApi from "@/components/utils/useApi";
 import RichTextEditor from "@/components/help-desk/RichTextEditor";
 import AddCustomerDialog from "@/pages/master/customers/create";
-import CreateProjectModal from "@/pages/master/projects/create";
+import CreateHelpDeskProjectModal from "@/pages/help-desk/projects/create";
 
 const filter = createFilterOptions();
 
@@ -541,7 +541,7 @@ export default function CreateTicketModal({ fetchItems, currentPage = 1, current
     try {
       setLoadingProjects(true);
       const token = localStorage.getItem("token");
-      const response = await fetch(`${BASE_URL}/Project/GetAllProjects`, {
+      const response = await fetch(`${BASE_URL}/HelpDesk/GetProjectsForAssign`, {
         method: "GET",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -550,7 +550,6 @@ export default function CreateTicketModal({ fetchItems, currentPage = 1, current
       });
       if (response.ok) {
         const data = await response.json();
-        // Master projects API returns { statusCode, message, result: [projects] }
         const projectList = Array.isArray(data?.result) ? data.result : (Array.isArray(data) ? data : []);
         setMasterProjects(projectList);
         return projectList;
@@ -563,13 +562,13 @@ export default function CreateTicketModal({ fetchItems, currentPage = 1, current
     return [];
   };
 
-  // Fetch master projects
+  // Fetch project management projects
   useEffect(() => {
-    const fetchMasterProjects = async () => {
+    const fetchProjectManagementProjects = async () => {
       try {
         setLoadingProjects(true);
         const token = localStorage.getItem("token");
-        const response = await fetch(`${BASE_URL}/Project/GetAllProjects`, {
+        const response = await fetch(`${BASE_URL}/HelpDesk/GetProjectsForAssign`, {
           method: "GET",
           headers: {
             Authorization: `Bearer ${token}`,
@@ -578,18 +577,17 @@ export default function CreateTicketModal({ fetchItems, currentPage = 1, current
         });
         if (response.ok) {
           const data = await response.json();
-          // Master projects API returns { statusCode, message, result: [projects] }
           const projectList = Array.isArray(data?.result) ? data.result : (Array.isArray(data) ? data : []);
           setMasterProjects(projectList);
         }
       } catch (error) {
-        console.error("Error fetching master projects:", error);
+        console.error("Error fetching project management projects:", error);
         toast.error("Failed to fetch projects");
       } finally {
         setLoadingProjects(false);
       }
     };
-    fetchMasterProjects();
+    fetchProjectManagementProjects();
   }, []);
 
   // Fetch customers for assign category
@@ -617,12 +615,12 @@ export default function CreateTicketModal({ fetchItems, currentPage = 1, current
     }
   };
 
-  // Fetch projects for assign category from master projects
+  // Fetch projects for assign category from ProjectManagement
   const fetchAssignProjects = async () => {
     try {
       setLoadingAssignProjects(true);
       const token = localStorage.getItem("token");
-      const response = await fetch(`${BASE_URL}/Project/GetAllProjects`, {
+      const response = await fetch(`${BASE_URL}/HelpDesk/GetProjectsForAssign`, {
         method: "GET",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -631,9 +629,8 @@ export default function CreateTicketModal({ fetchItems, currentPage = 1, current
       });
       if (response.ok) {
         const data = await response.json();
-        // Master projects API returns { statusCode, message, result: [projects] }
         const projectList = Array.isArray(data?.result) ? data.result : (Array.isArray(data) ? data : []);
-        console.log("Fetched master projects for assign:", projectList);
+        console.log("Fetched project management projects for assign:", projectList);
         setAssignProjects(projectList);
       } else {
         console.error("Failed to fetch projects:", response.status, response.statusText);
@@ -647,13 +644,13 @@ export default function CreateTicketModal({ fetchItems, currentPage = 1, current
     }
   };
 
-  // Fetch projects immediately on component mount (like project customer assign page)
+  // Fetch projects immediately on component mount
   useEffect(() => {
     const fetchProjects = async () => {
       try {
         setLoadingAssignProjects(true);
         const token = localStorage.getItem("token");
-        const response = await fetch(`${BASE_URL}/Project/GetAllProjects`, {
+        const response = await fetch(`${BASE_URL}/HelpDesk/GetProjectsForAssign`, {
           method: "GET",
           headers: {
             Authorization: `Bearer ${token}`,
@@ -662,9 +659,8 @@ export default function CreateTicketModal({ fetchItems, currentPage = 1, current
         });
         if (response.ok) {
           const data = await response.json();
-          // Master projects API returns { statusCode, message, result: [projects] }
           const projectList = Array.isArray(data?.result) ? data.result : (Array.isArray(data) ? data : []);
-          console.log("Fetched master projects for assign:", projectList);
+          console.log("Fetched project management projects for assign:", projectList);
           setAssignProjects(projectList);
         } else {
           console.error("Failed to fetch projects:", response.status, response.statusText);
@@ -2296,8 +2292,8 @@ export default function CreateTicketModal({ fetchItems, currentPage = 1, current
         showButton={false}
       />
 
-      {/* Create Project Modal - Using Master Project Create Component */}
-      <CreateProjectModal
+      {/* Create Project Modal - Using HelpDesk Project Create Component */}
+      <CreateHelpDeskProjectModal
         open={createProjectModalOpen}
         onClose={() => setCreateProjectModalOpen(false)}
         fetchItems={async (newProject) => {

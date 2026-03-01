@@ -25,6 +25,7 @@ import "react-toastify/dist/ReactToastify.css";
 import BorderColorIcon from "@mui/icons-material/BorderColor";
 import CloudUploadIcon from "@mui/icons-material/CloudUpload";
 import DeleteIcon from "@mui/icons-material/Delete";
+import DownloadIcon from "@mui/icons-material/Download";
 import AddIcon from "@mui/icons-material/Add";
 
 // Controlled Category Modal Component
@@ -688,8 +689,43 @@ const validationSchema = Yup.object().shape({
 
 export default function EditItems({ fetchItems, item, isPOSSystem, uoms, isGarmentSystem, chartOfAccounts, barcodeEnabled, IsEcommerceWebSiteAvailable }) {
   const [open, setOpen] = React.useState(false);
-  const handleOpen = () => setOpen(true);
-  const handleClose = () => setOpen(false);
+  const [subImages, setSubImages] = useState([]); // { id, preview|imgUrl, file?, price, description, isExisting }
+  const [subImageIdsToRemove, setSubImageIdsToRemove] = useState([]);
+  const subImageInputRef = useRef(null);
+  const handleOpen = async () => {
+    setOpen(true);
+    try {
+      const res = await fetch(`${BASE_URL}/Items/GetItemById?id=${item.id}`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      });
+      const data = await res.json();
+      const subImgs = data.result?.itemSubImages ?? data.result?.ItemSubImages ?? [];
+      if (subImgs?.length) {
+        const existing = subImgs.map((s) => ({
+          id: s.id ?? s.Id,
+          imgUrl: s.imgUrl ?? s.ImgUrl ?? "",
+          price: s.price ?? s.Price ?? "",
+          description: s.description ?? s.Description ?? "",
+          isExisting: true,
+        }));
+        setSubImages(existing);
+      } else {
+        setSubImages([]);
+      }
+      setSubImageIdsToRemove([]);
+    } catch {
+      setSubImages([]);
+      setSubImageIdsToRemove([]);
+    }
+  };
+  const handleClose = () => {
+    setSubImages((prev) => {
+      prev.forEach((p) => p.preview && URL.revokeObjectURL(p.preview));
+      return [];
+    });
+    setSubImageIdsToRemove([]);
+    setOpen(false);
+  };
   const [selectedCat, setSelectedCat] = useState();
   const [categoryList, setCategoryList] = useState([]);
   const [subCategoryList, setSubCategoryList] = useState([]);
@@ -864,6 +900,77 @@ export default function EditItems({ fetchItems, item, isPOSSystem, uoms, isGarme
     setSelectedFile(null);
   };
 
+  const handleDownloadImage = async (imageUrl, filename = "item-image") => {
+    try {
+      if (!imageUrl) return;
+      if (imageUrl.startsWith("blob:")) {
+        const response = await fetch(imageUrl);
+        const blob = await response.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = blobUrl;
+        a.download = `${filename || "item-image"}.png`;
+        a.click();
+        URL.revokeObjectURL(blobUrl);
+      } else {
+        const proxyUrl = `${BASE_URL}/Items/DownloadImage?url=${encodeURIComponent(imageUrl)}&filename=${encodeURIComponent((filename || "item-image") + ".png")}`;
+        const response = await fetch(proxyUrl, {
+          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        });
+        if (!response.ok) throw new Error("Failed to fetch image");
+        const blob = await response.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = blobUrl;
+        a.download = `${filename || "item-image"}.png`;
+        a.click();
+        URL.revokeObjectURL(blobUrl);
+      }
+      toast.success("Image downloaded");
+    } catch (err) {
+      toast.error("Failed to download image");
+    }
+  };
+
+  const handleSubImagesUpload = (event) => {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+    const newSubImages = [];
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      if (!file.type.startsWith("image/")) continue;
+      const id = `new_${Date.now()}_${i}_${Math.random().toString(36).slice(2)}`;
+      newSubImages.push({
+        id,
+        preview: URL.createObjectURL(file),
+        file,
+        price: "",
+        description: "",
+        isExisting: false,
+      });
+    }
+    setSubImages((prev) => [...prev, ...newSubImages]);
+    event.target.value = "";
+  };
+
+  const updateSubImageMeta = (id, field, value) => {
+    setSubImages((prev) =>
+      prev.map((s) => (s.id === id ? { ...s, [field]: value } : s))
+    );
+  };
+
+  const removeSubImage = (id) => {
+    const s = subImages.find((p) => p.id === id);
+    if (s?.isExisting && typeof s.id === "number") {
+      setSubImageIdsToRemove((r) => [...r, s.id]);
+    }
+    setSubImages((prev) => {
+      const found = prev.find((p) => p.id === id);
+      if (found?.preview) URL.revokeObjectURL(found.preview);
+      return prev.filter((p) => p.id !== id);
+    });
+  };
+
   const handleCategoryCreated = async () => {
     await fetchCategoryList();
   };
@@ -923,6 +1030,22 @@ export default function EditItems({ fetchItems, item, isPOSSystem, uoms, isGarme
     formData.append("HasSerialNumbers", values.HasSerialNumbers);
     formData.append("IsWebView", values.IsWebView);
     formData.append("ProductImage", selectedFile ? selectedFile : null);
+    (subImages || []).forEach((s) => {
+      if (s.file) formData.append("SubImages", s.file);
+    });
+    const subImagesMeta = (subImages || [])
+      .filter((s) => s.file)
+      .map((s) => {
+        const priceVal = s.price !== "" && s.price != null ? parseFloat(s.price) : NaN;
+        return {
+          price: !isNaN(priceVal) ? priceVal : null,
+          description: (s.description || "").trim() || null,
+        };
+      });
+    formData.append("SubImagesMeta", JSON.stringify(subImagesMeta));
+    if (subImageIdsToRemove.length > 0) {
+      formData.append("SubImageIdsToRemove", subImageIdsToRemove.join(","));
+    }
     if (values.Description && values.Description.trim() !== "") {
       formData.append("Description", values.Description);
     }
@@ -936,8 +1059,13 @@ export default function EditItems({ fetchItems, item, isPOSSystem, uoms, isGarme
     })
       .then((response) => response.json())
       .then((data) => {
-        if (data.statusCode == 200) {
+        if (data?.statusCode == 200) {
           toast.success(data.message);
+          setSubImages((prev) => {
+            prev.forEach((p) => p.preview && URL.revokeObjectURL(p.preview));
+            return [];
+          });
+          setSubImageIdsToRemove([]);
           setOpen(false);
           fetchItems();
         } else {
@@ -1602,7 +1730,7 @@ export default function EditItems({ fetchItems, item, isPOSSystem, uoms, isGarme
                                   borderRadius: "8px",
                                   overflow: "hidden",
                                   height: "250px",
-                                  "&:hover .delete-icon": {
+                                  "&:hover .image-action-icon": {
                                     opacity: 1,
                                   },
                                 }}
@@ -1616,24 +1744,46 @@ export default function EditItems({ fetchItems, item, isPOSSystem, uoms, isGarme
                                     objectFit: "cover",
                                   }}
                                 />
-                                <IconButton
-                                  className="delete-icon"
-                                  onClick={handleRemoveImage}
-                                  sx={{
-                                    position: "absolute",
-                                    top: 5,
-                                    right: 5,
-                                    backgroundColor: "rgba(255, 255, 255, 0.9)",
-                                    opacity: 0,
-                                    transition: "opacity 0.3s",
-                                    "&:hover": {
-                                      backgroundColor: "rgba(255, 255, 255, 1)",
-                                    },
-                                  }}
-                                  size="small"
-                                >
-                                  <DeleteIcon fontSize="small" color="error" />
-                                </IconButton>
+                                <Tooltip title="Download">
+                                  <IconButton
+                                    className="image-action-icon"
+                                    onClick={() => handleDownloadImage(selectedImage, item?.code || item?.name || "item-image")}
+                                    sx={{
+                                      position: "absolute",
+                                      top: 5,
+                                      right: 45,
+                                      backgroundColor: "rgba(255, 255, 255, 0.9)",
+                                      opacity: 0,
+                                      transition: "opacity 0.3s",
+                                      "&:hover": {
+                                        backgroundColor: "rgba(255, 255, 255, 1)",
+                                      },
+                                    }}
+                                    size="small"
+                                  >
+                                    <DownloadIcon fontSize="small" color="primary" />
+                                  </IconButton>
+                                </Tooltip>
+                                <Tooltip title="Delete">
+                                  <IconButton
+                                    className="image-action-icon"
+                                    onClick={handleRemoveImage}
+                                    sx={{
+                                      position: "absolute",
+                                      top: 5,
+                                      right: 5,
+                                      backgroundColor: "rgba(255, 255, 255, 0.9)",
+                                      opacity: 0,
+                                      transition: "opacity 0.3s",
+                                      "&:hover": {
+                                        backgroundColor: "rgba(255, 255, 255, 1)",
+                                      },
+                                    }}
+                                    size="small"
+                                  >
+                                    <DeleteIcon fontSize="small" color="error" />
+                                  </IconButton>
+                                </Tooltip>
                               </Box>
                             </Grid>
                           </Grid>
@@ -1661,6 +1811,124 @@ export default function EditItems({ fetchItems, item, isPOSSystem, uoms, isGarme
                           </Box>
                         </Grid>
                       )}
+
+                      {/* Sub Images section */}
+                      <Grid item xs={12} sx={{ mt: 3 }}>
+                        <Typography variant="h6" sx={{ mb: 2 }}>
+                          Sub Images
+                        </Typography>
+                        <Button
+                          variant="contained"
+                          component="label"
+                          startIcon={<CloudUploadIcon />}
+                          sx={{ mb: 2 }}
+                        >
+                          Choose Image
+                          <input
+                            ref={subImageInputRef}
+                            type="file"
+                            hidden
+                            accept="image/*"
+                            multiple
+                            onChange={handleSubImagesUpload}
+                          />
+                        </Button>
+                        {subImages.length > 0 ? (
+                          <Grid container spacing={2}>
+                            {subImages.map((s) => (
+                              <Grid item xs={12} sm={6} md={4} key={s.id}>
+                                <Box
+                                  sx={{
+                                    position: "relative",
+                                    border: "2px solid #e0e0e0",
+                                    borderRadius: "8px",
+                                    overflow: "hidden",
+                                    "&:hover .delete-icon, &:hover .download-icon": { opacity: 1 },
+                                  }}
+                                >
+                                  <Box sx={{ height: "140px", position: "relative", backgroundColor: "#f5f5f5" }}>
+                                    <img
+                                      src={s.imgUrl || s.preview}
+                                      alt="Sub"
+                                      style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                                    />
+                                    <IconButton
+                                      className="delete-icon"
+                                      onClick={() => removeSubImage(s.id)}
+                                      sx={{
+                                        position: "absolute",
+                                        top: 5,
+                                        right: 5,
+                                        backgroundColor: "rgba(255, 255, 255, 0.9)",
+                                        opacity: 0,
+                                        transition: "opacity 0.3s",
+                                        "&:hover": { backgroundColor: "rgba(255, 255, 255, 1)" },
+                                      }}
+                                      size="small"
+                                    >
+                                      <DeleteIcon fontSize="small" color="error" />
+                                    </IconButton>
+                                    <Tooltip title="Download">
+                                      <IconButton
+                                        className="download-icon"
+                                        onClick={() => handleDownloadImage(s.imgUrl || s.preview, `sub-${s.id}`)}
+                                        sx={{
+                                          position: "absolute",
+                                          top: 5,
+                                          right: 45,
+                                          backgroundColor: "rgba(255, 255, 255, 0.9)",
+                                          opacity: 0,
+                                          transition: "opacity 0.3s",
+                                          "&:hover": { backgroundColor: "rgba(255, 255, 255, 1)" },
+                                        }}
+                                        size="small"
+                                      >
+                                        <DownloadIcon fontSize="small" color="primary" />
+                                      </IconButton>
+                                    </Tooltip>
+                                  </Box>
+                                  <Box sx={{ p: 1.5 }}>
+                                    <TextField
+                                      fullWidth
+                                      size="small"
+                                      label="Price"
+                                      type="number"
+                                      inputProps={{ min: 0, step: 0.01 }}
+                                      value={s.price ?? ""}
+                                      onChange={(e) => updateSubImageMeta(s.id, "price", e.target.value)}
+                                      sx={{ mb: 1 }}
+                                    />
+                                    <TextField
+                                      fullWidth
+                                      size="small"
+                                      label="Description"
+                                      multiline
+                                      rows={2}
+                                      value={s.description ?? ""}
+                                      onChange={(e) => updateSubImageMeta(s.id, "description", e.target.value)}
+                                    />
+                                  </Box>
+                                </Box>
+                              </Grid>
+                            ))}
+                          </Grid>
+                        ) : (
+                          <Box
+                            sx={{
+                              border: "2px dashed #ccc",
+                              borderRadius: "8px",
+                              p: 3,
+                              textAlign: "center",
+                              backgroundColor: "#f9f9f9",
+                            }}
+                          >
+                            <CloudUploadIcon sx={{ fontSize: 48, color: "#999", mb: 1 }} />
+                            <Typography variant="body2" color="textSecondary">
+                              No sub images. Click &quot;Choose Image&quot; to add multiple images.
+                            </Typography>
+                          </Box>
+                        )}
+                      </Grid>
                     </Grid>
                   </Box>
                   )}
