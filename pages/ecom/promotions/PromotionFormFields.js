@@ -1,7 +1,7 @@
 import React from "react";
 import { Grid, Typography, TextField, FormControlLabel, Checkbox, Autocomplete } from "@mui/material";
 import { Field } from "formik";
-import { PROMOTION_CATEGORIES, PROMOTION_TYPES } from "./promotionConfig";
+import { PROMOTION_CATEGORIES, PROMOTION_TYPES } from "@/components/utils/promotionConfig";
 
 export default function PromotionFormFields({ values, setFieldValue, errors, touched, isEdit }) {
   const category = values.PromotionCategory;

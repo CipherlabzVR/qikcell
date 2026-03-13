@@ -12,7 +12,7 @@ export const PROMOTION_TYPES = {
   DiscountBased: [
     { value: "PercentageOff", label: "Percentage Off (e.g. 20% off entire order)" },
     { value: "FixedAmountOff", label: "Fixed Amount Off (e.g. Rs. 500 off orders over Rs. 3000)" },
-    { value: "TieredDiscount", label: "Tiered Discount (e.g. Spend Rs. 5000 → 10%, Rs. 10000 → 20%)" },
+    { value: "TieredDiscount", label: "Tiered Discount (e.g. Spend Rs. 5000 -> 10%, Rs. 10000 -> 20%)" },
   ],
   ProductBased: [
     { value: "BuyXGetYFree", label: "Buy X Get Y Free (e.g. Buy 2 get 1 free)" },
@@ -26,7 +26,7 @@ export const PROMOTION_TYPES = {
   CustomerBased: [
     { value: "NewUser", label: "New User (First order Rs. 500 off)" },
     { value: "LoyaltyVip", label: "Loyalty / VIP (e.g. Platinum members get 15% always)" },
-    { value: "Referral", label: "Referral (Refer a friend → both get Rs. 300)" },
+    { value: "Referral", label: "Referral (Refer a friend -> both get Rs. 300)" },
     { value: "Birthday", label: "Birthday (10% off during birthday month)" },
   ],
   TimeBased: [

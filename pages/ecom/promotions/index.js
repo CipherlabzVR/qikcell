@@ -19,7 +19,7 @@ import IsPermissionEnabled from "@/components/utils/IsPermissionEnabled";
 import AccessDenied from "@/components/UIElements/Permission/AccessDenied";
 import AddPromotion from "./create";
 import EditPromotion from "./edit";
-import { PROMOTION_CATEGORIES, PROMOTION_TYPES } from "./promotionConfig";
+import { PROMOTION_CATEGORIES, PROMOTION_TYPES } from "@/components/utils/promotionConfig";
 
 export default function Promotions() {
   const cId = sessionStorage.getItem("category");

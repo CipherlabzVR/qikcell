@@ -7,7 +7,7 @@ import { toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import BASE_URL from "Base/api";
 import PromotionFormFields from "./PromotionFormFields";
-import { buildConfigJson } from "./promotionConfig";
+import { buildConfigJson } from "@/components/utils/promotionConfig";
 
 const style = {
   position: "absolute",
