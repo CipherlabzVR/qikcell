@@ -18,46 +18,22 @@ import { toast } from "react-toastify";
 import { useRouter } from "next/router";
 import "react-toastify/dist/ReactToastify.css";
 import getDeviceName from "@/components/utils/getDeviceName";
+import DeviceNameDialog from "@/components/Authentication/DeviceNameDialog";
 
 const HRLoginForm = () => {
   const [showError, setShowError] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loginNote, setLoginNote] = useState("");
+  const [deviceDialogOpen, setDeviceDialogOpen] = useState(false);
+  const [deviceNameInput, setDeviceNameInput] = useState("");
+  const [pendingLogin, setPendingLogin] = useState(null);
   const router = useRouter();
 
-  const handleSubmit = async (event) => {
-    event.preventDefault();
-    const data = new FormData(event.currentTarget);
-    const usernameOrEmail = data.get("usernameOrEmail");
-    const password = data.get("password");
-
-    if (!usernameOrEmail || !password) {
-      setShowError(true);
-      return;
-    }
-
+  const loginWithDeviceName = async (usernameOrEmail, password, deviceName) => {
     setLoginNote("");
     setLoading(true);
     try {
-      const deviceStorageKey = `rememberedDeviceName:${String(usernameOrEmail).trim().toLowerCase()}`;
-      let deviceName = localStorage.getItem(deviceStorageKey);
-      if (!deviceName) {
-        const suggestedName = getDeviceName();
-        const enteredDeviceName = window.prompt(
-          "New device detected. Enter a device name to remember this device.",
-          suggestedName
-        );
-
-        if (!enteredDeviceName || !enteredDeviceName.trim()) {
-          toast.error("Device name is required to remember this device.");
-          return;
-        }
-
-        deviceName = enteredDeviceName.trim();
-        localStorage.setItem(deviceStorageKey, deviceName);
-      }
-
       const response = await fetch(`${BASE_URL}/hr/HRAuthentication/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -112,7 +88,7 @@ const HRLoginForm = () => {
     } catch (error) {
       const message = error.message || "Login failed";
 
-      if (message.includes("3 registered devices") || message.includes("contact admin")) {
+      if (message.includes("registered devices") || message.includes("contact admin")) {
         setLoginNote(message);
         return;
       }
@@ -121,6 +97,55 @@ const HRLoginForm = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    const usernameOrEmail = data.get("usernameOrEmail");
+    const password = data.get("password");
+
+    if (!usernameOrEmail || !password) {
+      setShowError(true);
+      return;
+    }
+
+    const userIdentifier = String(usernameOrEmail).trim().toLowerCase();
+    const deviceStorageKey = `rememberedDeviceName:${userIdentifier}`;
+    const rememberedDeviceName = localStorage.getItem(deviceStorageKey);
+
+    if (rememberedDeviceName) {
+      await loginWithDeviceName(usernameOrEmail, password, rememberedDeviceName);
+      return;
+    }
+
+    setPendingLogin({ usernameOrEmail, password, deviceStorageKey });
+    setDeviceNameInput(getDeviceName());
+    setDeviceDialogOpen(true);
+  };
+
+  const handleDeviceDialogCancel = () => {
+    setDeviceDialogOpen(false);
+    setPendingLogin(null);
+  };
+
+  const handleDeviceDialogConfirm = async () => {
+    const trimmedDeviceName = deviceNameInput.trim();
+    if (!trimmedDeviceName) {
+      toast.error("Device name is required to remember this device.");
+      return;
+    }
+
+    if (!pendingLogin) {
+      setDeviceDialogOpen(false);
+      return;
+    }
+
+    localStorage.setItem(pendingLogin.deviceStorageKey, trimmedDeviceName);
+    const { usernameOrEmail, password } = pendingLogin;
+    setPendingLogin(null);
+    setDeviceDialogOpen(false);
+    await loginWithDeviceName(usernameOrEmail, password, trimmedDeviceName);
   };
 
   return (
@@ -283,6 +308,13 @@ const HRLoginForm = () => {
           </Box>
         </Grid>
       </Grid>
+      <DeviceNameDialog
+        open={deviceDialogOpen}
+        value={deviceNameInput}
+        onChange={setDeviceNameInput}
+        onCancel={handleDeviceDialogCancel}
+        onConfirm={handleDeviceDialogConfirm}
+      />
     </Box>
   );
 };

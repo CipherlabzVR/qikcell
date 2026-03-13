@@ -21,45 +21,21 @@ import FacebookIcon from '@mui/icons-material/Facebook';
 import LinkedInIcon from '@mui/icons-material/LinkedIn';
 import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import getDeviceName from "@/components/utils/getDeviceName";
+import DeviceNameDialog from "@/components/Authentication/DeviceNameDialog";
 
 const SignInForm = () => {
   const [showError, setShowError] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [loginNote, setLoginNote] = useState("");
+  const [deviceDialogOpen, setDeviceDialogOpen] = useState(false);
+  const [deviceNameInput, setDeviceNameInput] = useState("");
+  const [pendingLogin, setPendingLogin] = useState(null);
   const router = useRouter();
 
-  const handleSubmit = async (event) => {
-    event.preventDefault();
-    const data = new FormData(event.currentTarget);
-    const email = data.get("email");
-    const password = data.get("password");
-
-    if (!email || !password) {
-      setShowError(true);
-      return;
-    }
-
+  const loginWithDeviceName = async (email, password, deviceName) => {
     setLoginNote("");
 
     try {
-      const deviceStorageKey = `rememberedDeviceName:${String(email).trim().toLowerCase()}`;
-      let deviceName = localStorage.getItem(deviceStorageKey);
-      if (!deviceName) {
-        const suggestedName = getDeviceName();
-        const enteredDeviceName = window.prompt(
-          "New device detected. Enter a device name to remember this device.",
-          suggestedName
-        );
-
-        if (!enteredDeviceName || !enteredDeviceName.trim()) {
-          toast.error("Device name is required to remember this device.");
-          return;
-        }
-
-        deviceName = enteredDeviceName.trim();
-        localStorage.setItem(deviceStorageKey, deviceName);
-      }
-
       const response = await fetch(`${BASE_URL}/User/SignIn`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -96,13 +72,62 @@ const SignInForm = () => {
     } catch (error) {
       const message = error.message || "Login failed";
 
-      if (message.includes("3 registered devices") || message.includes("contact admin")) {
+      if (message.includes("registered devices") || message.includes("contact admin")) {
         setLoginNote(message);
         return;
       }
 
       toast.error(message);
     }
+  };
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    const email = data.get("email");
+    const password = data.get("password");
+
+    if (!email || !password) {
+      setShowError(true);
+      return;
+    }
+
+    const normalizedEmail = String(email).trim().toLowerCase();
+    const deviceStorageKey = `rememberedDeviceName:${normalizedEmail}`;
+    const rememberedDeviceName = localStorage.getItem(deviceStorageKey);
+
+    if (rememberedDeviceName) {
+      await loginWithDeviceName(email, password, rememberedDeviceName);
+      return;
+    }
+
+    setPendingLogin({ email, password, deviceStorageKey });
+    setDeviceNameInput(getDeviceName());
+    setDeviceDialogOpen(true);
+  };
+
+  const handleDeviceDialogCancel = () => {
+    setDeviceDialogOpen(false);
+    setPendingLogin(null);
+  };
+
+  const handleDeviceDialogConfirm = async () => {
+    const trimmedDeviceName = deviceNameInput.trim();
+    if (!trimmedDeviceName) {
+      toast.error("Device name is required to remember this device.");
+      return;
+    }
+
+    if (!pendingLogin) {
+      setDeviceDialogOpen(false);
+      return;
+    }
+
+    localStorage.setItem(pendingLogin.deviceStorageKey, trimmedDeviceName);
+    const { email, password } = pendingLogin;
+    setPendingLogin(null);
+    setDeviceDialogOpen(false);
+    await loginWithDeviceName(email, password, trimmedDeviceName);
   };
 
   return (
@@ -272,6 +297,13 @@ const SignInForm = () => {
           </Box>
         </Grid>
       </Grid>
+      <DeviceNameDialog
+        open={deviceDialogOpen}
+        value={deviceNameInput}
+        onChange={setDeviceNameInput}
+        onCancel={handleDeviceDialogCancel}
+        onConfirm={handleDeviceDialogConfirm}
+      />
     </Box>
   );
 };
