@@ -52,6 +52,25 @@ const DrawerSignIn = () => {
       setLoginNote("");
 
       try {
+        const userIdentifier = String(formData.Email || "").trim().toLowerCase();
+        const deviceStorageKey = `rememberedDeviceName:${userIdentifier}`;
+        let deviceName = localStorage.getItem(deviceStorageKey);
+        if (!deviceName) {
+          const suggestedName = getDeviceName();
+          const enteredDeviceName = window.prompt(
+            "New device detected. Enter a device name to remember this device.",
+            suggestedName
+          );
+
+          if (!enteredDeviceName || !enteredDeviceName.trim()) {
+            toast.error("Device name is required to remember this device.");
+            return;
+          }
+
+          deviceName = enteredDeviceName.trim();
+          localStorage.setItem(deviceStorageKey, deviceName);
+        }
+
         const response = await fetch(`${BASE_URL}/User/SignIn`, {
           method: "POST",
           headers: {
@@ -59,7 +78,7 @@ const DrawerSignIn = () => {
           },
           body: JSON.stringify({
             ...formData,
-            DeviceName: getDeviceName(),
+            DeviceName: deviceName,
           }),
         });
         const responseData = await response.json();

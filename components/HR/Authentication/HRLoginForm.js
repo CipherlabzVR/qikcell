@@ -40,13 +40,31 @@ const HRLoginForm = () => {
     setLoginNote("");
     setLoading(true);
     try {
+      const deviceStorageKey = `rememberedDeviceName:${String(usernameOrEmail).trim().toLowerCase()}`;
+      let deviceName = localStorage.getItem(deviceStorageKey);
+      if (!deviceName) {
+        const suggestedName = getDeviceName();
+        const enteredDeviceName = window.prompt(
+          "New device detected. Enter a device name to remember this device.",
+          suggestedName
+        );
+
+        if (!enteredDeviceName || !enteredDeviceName.trim()) {
+          toast.error("Device name is required to remember this device.");
+          return;
+        }
+
+        deviceName = enteredDeviceName.trim();
+        localStorage.setItem(deviceStorageKey, deviceName);
+      }
+
       const response = await fetch(`${BASE_URL}/hr/HRAuthentication/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
           UsernameOrEmail: usernameOrEmail, 
           Password: password,
-          DeviceName: getDeviceName(),
+          DeviceName: deviceName,
         }),
       });
 
