@@ -4,6 +4,7 @@ import {
   TextField,
   Button,
   Typography,
+  Alert,
   IconButton,
   InputAdornment,
 } from "@mui/material";
@@ -12,6 +13,7 @@ import { toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import BASE_URL from "Base/api";
 import { useRouter } from "next/router";
+import getDeviceName from "@/components/utils/getDeviceName";
 
 const DrawerSignIn = () => {
   const router = useRouter();
@@ -23,6 +25,7 @@ const DrawerSignIn = () => {
 
   const [formErrors, setFormErrors] = useState({});
   const [showPassword, setShowPassword] = useState(false);
+  const [loginNote, setLoginNote] = useState("");
 
   const validate = () => {
     const errors = {};
@@ -46,19 +49,25 @@ const DrawerSignIn = () => {
 
   const handleSubmit = async () => {
     if (validate()) {
+      setLoginNote("");
+
       try {
         const response = await fetch(`${BASE_URL}/User/SignIn`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify(formData),
+          body: JSON.stringify({
+            ...formData,
+            DeviceName: getDeviceName(),
+          }),
         });
+        const responseData = await response.json();
 
         if (!response.ok) {
-          throw new Error("Invalid Username or Password");
+          throw new Error(responseData.message || "Login failed");
         }
-        const responseData = await response.json();
+
         const token = responseData.result.accessToken;
         const user = responseData.result.email;
         const usertype = responseData.result.userType;
@@ -83,7 +92,14 @@ const DrawerSignIn = () => {
 
         window.location.href = "/dashboard/reservation/";
       } catch (error) {
-        toast.error(error.message);
+        const message = error.message || "Login failed";
+
+        if (message.includes("3 registered devices") || message.includes("contact admin")) {
+          setLoginNote(message);
+          return;
+        }
+
+        toast.error(message);
       }
     }
   };
@@ -98,6 +114,11 @@ const DrawerSignIn = () => {
         <img src="/images/DBlogo.png" alt="Logo" className="black-logo" />
       </Grid>
       <Grid item xs={12}>
+        {loginNote && (
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            {loginNote}
+          </Alert>
+        )}
         <TextField
           fullWidth
           label="Email"

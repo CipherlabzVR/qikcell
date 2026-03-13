@@ -6,6 +6,7 @@ import {
   Box,
   TextField,
   Button,
+  Alert,
   FormControlLabel,
   Checkbox,
   InputAdornment,
@@ -19,10 +20,12 @@ import "react-toastify/dist/ReactToastify.css";
 import FacebookIcon from '@mui/icons-material/Facebook';
 import LinkedInIcon from '@mui/icons-material/LinkedIn';
 import WhatsAppIcon from '@mui/icons-material/WhatsApp';
+import getDeviceName from "@/components/utils/getDeviceName";
 
 const SignInForm = () => {
   const [showError, setShowError] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [loginNote, setLoginNote] = useState("");
   const router = useRouter();
 
   const handleSubmit = async (event) => {
@@ -36,15 +39,19 @@ const SignInForm = () => {
       return;
     }
 
+    setLoginNote("");
+
     try {
       const response = await fetch(`${BASE_URL}/User/SignIn`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ Email: email, Password: password }),
+        body: JSON.stringify({ Email: email, Password: password, DeviceName: getDeviceName() }),
       });
-
-      if (!response.ok) throw new Error("Invalid email or password");
       const responseData = await response.json();
+
+      if (!response.ok) {
+        throw new Error(responseData.message || "Login failed");
+      }
 
       localStorage.setItem("token", responseData.result.accessToken);
       localStorage.setItem("user", responseData.result.email);
@@ -69,7 +76,14 @@ const SignInForm = () => {
       router.push("/");
       window.location.reload();
     } catch (error) {
-      toast.error(error.message);
+      const message = error.message || "Login failed";
+
+      if (message.includes("3 registered devices") || message.includes("contact admin")) {
+        setLoginNote(message);
+        return;
+      }
+
+      toast.error(message);
     }
   };
 
@@ -129,6 +143,12 @@ const SignInForm = () => {
               <Typography color="error" fontSize={13} mb={2}>
                 Please fill in all required fields.
               </Typography>
+            )}
+
+            {loginNote && (
+              <Alert severity="warning" sx={{ mb: 2 }}>
+                {loginNote}
+              </Alert>
             )}
 
             <TextField

@@ -6,6 +6,7 @@ import {
   Box,
   TextField,
   Button,
+  Alert,
   FormControlLabel,
   Checkbox,
   InputAdornment,
@@ -16,11 +17,13 @@ import BASE_URL from "Base/api";
 import { toast } from "react-toastify";
 import { useRouter } from "next/router";
 import "react-toastify/dist/ReactToastify.css";
+import getDeviceName from "@/components/utils/getDeviceName";
 
 const HRLoginForm = () => {
   const [showError, setShowError] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [loginNote, setLoginNote] = useState("");
   const router = useRouter();
 
   const handleSubmit = async (event) => {
@@ -34,6 +37,7 @@ const HRLoginForm = () => {
       return;
     }
 
+    setLoginNote("");
     setLoading(true);
     try {
       const response = await fetch(`${BASE_URL}/hr/HRAuthentication/login`, {
@@ -41,7 +45,8 @@ const HRLoginForm = () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
           UsernameOrEmail: usernameOrEmail, 
-          Password: password 
+          Password: password,
+          DeviceName: getDeviceName(),
         }),
       });
 
@@ -87,7 +92,14 @@ const HRLoginForm = () => {
         router.push("/hr");
       }
     } catch (error) {
-      toast.error(error.message || "Login failed");
+      const message = error.message || "Login failed";
+
+      if (message.includes("3 registered devices") || message.includes("contact admin")) {
+        setLoginNote(message);
+        return;
+      }
+
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -149,6 +161,12 @@ const HRLoginForm = () => {
               <Typography color="error" fontSize={13} mb={2}>
                 Please fill in all required fields.
               </Typography>
+            )}
+
+            {loginNote && (
+              <Alert severity="warning" sx={{ mb: 2 }}>
+                {loginNote}
+              </Alert>
             )}
 
             <TextField

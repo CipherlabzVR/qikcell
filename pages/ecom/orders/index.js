@@ -66,6 +66,7 @@ export default function Orders() {
     () => ({
       1: "Cash on Delivery",
       2: "Card",
+      3: "Bank Transfer",
     }),
     []
   );

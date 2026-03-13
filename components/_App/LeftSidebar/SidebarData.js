@@ -173,7 +173,12 @@ export const getSidebarData = (IsGarmentSystem) => {
             ModuleId: 20,
             IsAvailable: true,
             subNav: [
-                { title: "Online Orders", path: "/ecom/orders/", categoryId: 107, isAvailable: true },
+                { title: "Online Orders", path: "/ecom/orders/", categoryId: 108, isAvailable: true },
+                { title: "ECommerce Customer", path: "/ecom/customers/", categoryId: 161, isAvailable: true },
+                { title: "Promotions", path: "/ecom/promotions/", categoryId: 160, isAvailable: true },
+                { title: "Topbar Notifications", path: "/ecom/topbar-notifications/", categoryId: 157, isAvailable: true },
+                { title: "Hero Banners", path: "/ecom/hero-banners/", categoryId: 158, isAvailable: true },
+                { title: "Blog Posts", path: "/ecom/blog-posts/", categoryId: 159, isAvailable: true },
             ],
         },
         {
