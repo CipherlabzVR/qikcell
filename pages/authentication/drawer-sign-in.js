@@ -29,7 +29,7 @@ const DrawerSignIn = () => {
   const [loginNote, setLoginNote] = useState("");
   const [deviceDialogOpen, setDeviceDialogOpen] = useState(false);
   const [deviceNameInput, setDeviceNameInput] = useState("");
-  const [pendingLogin, setPendingLogin] = useState(null);
+  const [loginResult, setLoginResult] = useState(null);
 
   const validate = () => {
     const errors = {};
@@ -51,8 +51,11 @@ const DrawerSignIn = () => {
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const loginWithDeviceName = async (deviceName) => {
+  const handleSubmit = async () => {
+    if (!validate()) return;
+
     setLoginNote("");
+
     try {
       const response = await fetch(`${BASE_URL}/User/SignIn`, {
         method: "POST",
@@ -61,7 +64,7 @@ const DrawerSignIn = () => {
         },
         body: JSON.stringify({
           ...formData,
-          DeviceName: deviceName,
+          DeviceName: getDeviceName(),
         }),
       });
       const responseData = await response.json();
@@ -70,27 +73,31 @@ const DrawerSignIn = () => {
         throw new Error(responseData.message || "Login failed");
       }
 
-      const token = responseData.result.accessToken;
-      const user = responseData.result.email;
-      const usertype = responseData.result.userType;
-      const warehouse = responseData.result.warehouseId;
-      const company = responseData.result.companyId;
-      localStorage.setItem("token", token);
-      localStorage.setItem("user", user);
-      localStorage.setItem("userid", responseData.result.id);
-      localStorage.setItem("name", responseData.result.firstName);
-      localStorage.setItem("type", usertype);
-      localStorage.setItem("warehouse", warehouse);
-      localStorage.setItem("company", company);
-      localStorage.setItem("role", responseData.result.userRole);
+      const result = responseData.result;
+
+      localStorage.setItem("token", result.accessToken);
+      localStorage.setItem("user", result.email);
+      localStorage.setItem("userid", result.id);
+      localStorage.setItem("name", result.firstName);
+      localStorage.setItem("type", result.userType);
+      localStorage.setItem("warehouse", result.warehouseId);
+      localStorage.setItem("company", result.companyId);
+      localStorage.setItem("role", result.userRole);
 
       fetch(`${BASE_URL}/Company/CreateCompanyHostingFeeIfDue`, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${result.accessToken}`,
           "Content-Type": "application/json",
         },
       }).catch(() => {});
+
+      if (result.isNewDevice) {
+        setLoginResult(result);
+        setDeviceNameInput(getDeviceName());
+        setDeviceDialogOpen(true);
+        return;
+      }
 
       window.location.href = "/dashboard/reservation/";
     } catch (error) {
@@ -105,45 +112,32 @@ const DrawerSignIn = () => {
     }
   };
 
-  const handleSubmit = async () => {
-    if (!validate()) {
-      return;
-    }
-
-    const userIdentifier = String(formData.Email || "").trim().toLowerCase();
-    const deviceStorageKey = `rememberedDeviceName:${userIdentifier}`;
-    const rememberedDeviceName = localStorage.getItem(deviceStorageKey);
-    if (rememberedDeviceName) {
-      await loginWithDeviceName(rememberedDeviceName);
-      return;
-    }
-
-    setPendingLogin({ deviceStorageKey });
-    setDeviceNameInput(getDeviceName());
-    setDeviceDialogOpen(true);
-  };
-
   const handleDeviceDialogCancel = () => {
     setDeviceDialogOpen(false);
-    setPendingLogin(null);
+    window.location.href = "/dashboard/reservation/";
   };
 
   const handleDeviceDialogConfirm = async () => {
-    const trimmedDeviceName = deviceNameInput.trim();
-    if (!trimmedDeviceName) {
-      toast.error("Device name is required to remember this device.");
-      return;
+    const trimmed = deviceNameInput.trim();
+    if (!trimmed || !loginResult) return;
+
+    try {
+      await fetch(
+        `${BASE_URL}/User/RenameCurrentDevice?newDeviceName=${encodeURIComponent(trimmed)}`,
+        {
+          method: "PUT",
+          headers: {
+            Authorization: `Bearer ${loginResult.accessToken}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+    } catch {
+      // Best-effort rename
     }
 
-    if (!pendingLogin) {
-      setDeviceDialogOpen(false);
-      return;
-    }
-
-    localStorage.setItem(pendingLogin.deviceStorageKey, trimmedDeviceName);
-    setPendingLogin(null);
     setDeviceDialogOpen(false);
-    await loginWithDeviceName(trimmedDeviceName);
+    window.location.href = "/dashboard/reservation/";
   };
 
   const togglePasswordVisibility = () => {
@@ -202,14 +196,13 @@ const DrawerSignIn = () => {
           Sign In
         </Button>
       </Grid>
-    <DeviceNameDialog
-      open={deviceDialogOpen}
-      value={deviceNameInput}
-      onChange={setDeviceNameInput}
-      onCancel={handleDeviceDialogCancel}
-      onConfirm={handleDeviceDialogConfirm}
-    />
-
+      <DeviceNameDialog
+        open={deviceDialogOpen}
+        value={deviceNameInput}
+        onChange={setDeviceNameInput}
+        onCancel={handleDeviceDialogCancel}
+        onConfirm={handleDeviceDialogConfirm}
+      />
     </Grid>
   );
 };

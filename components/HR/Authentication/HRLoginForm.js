@@ -27,30 +27,40 @@ const HRLoginForm = () => {
   const [loginNote, setLoginNote] = useState("");
   const [deviceDialogOpen, setDeviceDialogOpen] = useState(false);
   const [deviceNameInput, setDeviceNameInput] = useState("");
-  const [pendingLogin, setPendingLogin] = useState(null);
+  const [loginResult, setLoginResult] = useState(null);
+  const [pendingRedirect, setPendingRedirect] = useState(null);
   const router = useRouter();
 
-  const loginWithDeviceName = async (usernameOrEmail, password, deviceName) => {
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    const usernameOrEmail = data.get("usernameOrEmail");
+    const password = data.get("password");
+
+    if (!usernameOrEmail || !password) {
+      setShowError(true);
+      return;
+    }
+
     setLoginNote("");
     setLoading(true);
     try {
       const response = await fetch(`${BASE_URL}/hr/HRAuthentication/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          UsernameOrEmail: usernameOrEmail, 
+        body: JSON.stringify({
+          UsernameOrEmail: usernameOrEmail,
           Password: password,
-          DeviceName: deviceName,
+          DeviceName: getDeviceName(),
         }),
       });
 
       const responseData = await response.json();
-      
-      // Check for success
+
       const statusCode = responseData.statusCode || responseData.StatusCode;
-      const isSuccess = 
+      const isSuccess =
         response.ok && (
-          statusCode === 200 || 
+          statusCode === 200 ||
           statusCode === "200" ||
           statusCode === "SUCCESS" ||
           (statusCode === undefined && !responseData.message && !responseData.Message)
@@ -62,7 +72,7 @@ const HRLoginForm = () => {
       }
 
       const result = responseData.result || responseData.Result;
-      
+
       localStorage.setItem("token", result.accessToken || result.AccessToken);
       localStorage.setItem("user", result.email || result.Email);
       localStorage.setItem("userid", result.id || result.Id);
@@ -73,12 +83,25 @@ const HRLoginForm = () => {
       localStorage.setItem("role", result.userRole || result.UserRole);
       localStorage.setItem("isPasswordReset", result.isPasswordReset || result.IsPasswordReset || false);
 
-      // Set flag for holiday greeting to show on fresh login
       sessionStorage.removeItem("holidayGreetingShown");
       sessionStorage.setItem("justLoggedIn", "true");
 
-      // Check if first-time password reset is needed
-      if (result.isPasswordReset === false || result.IsPasswordReset === false) {
+      const needsPasswordReset = result.isPasswordReset === false || result.IsPasswordReset === false;
+      const isNewDevice = result.isNewDevice || result.IsNewDevice;
+      const redirectPath = needsPasswordReset ? "/hr/authentication/first-time-password-reset" : "/hr";
+
+      if (isNewDevice) {
+        setLoginResult(result);
+        setPendingRedirect(redirectPath);
+        setDeviceNameInput(getDeviceName());
+        setDeviceDialogOpen(true);
+        if (needsPasswordReset) {
+          toast.info("Please reset your password on first login");
+        }
+        return;
+      }
+
+      if (needsPasswordReset) {
         toast.info("Please reset your password on first login");
         router.push("/hr/authentication/first-time-password-reset");
       } else {
@@ -99,53 +122,35 @@ const HRLoginForm = () => {
     }
   };
 
-  const handleSubmit = async (event) => {
-    event.preventDefault();
-    const data = new FormData(event.currentTarget);
-    const usernameOrEmail = data.get("usernameOrEmail");
-    const password = data.get("password");
-
-    if (!usernameOrEmail || !password) {
-      setShowError(true);
-      return;
-    }
-
-    const userIdentifier = String(usernameOrEmail).trim().toLowerCase();
-    const deviceStorageKey = `rememberedDeviceName:${userIdentifier}`;
-    const rememberedDeviceName = localStorage.getItem(deviceStorageKey);
-
-    if (rememberedDeviceName) {
-      await loginWithDeviceName(usernameOrEmail, password, rememberedDeviceName);
-      return;
-    }
-
-    setPendingLogin({ usernameOrEmail, password, deviceStorageKey });
-    setDeviceNameInput(getDeviceName());
-    setDeviceDialogOpen(true);
-  };
-
   const handleDeviceDialogCancel = () => {
     setDeviceDialogOpen(false);
-    setPendingLogin(null);
+    router.push(pendingRedirect || "/hr");
   };
 
   const handleDeviceDialogConfirm = async () => {
-    const trimmedDeviceName = deviceNameInput.trim();
-    if (!trimmedDeviceName) {
-      toast.error("Device name is required to remember this device.");
-      return;
+    const trimmed = deviceNameInput.trim();
+    if (!trimmed) return;
+
+    const token = loginResult?.accessToken || loginResult?.AccessToken;
+    if (token) {
+      try {
+        await fetch(
+          `${BASE_URL}/User/RenameCurrentDevice?newDeviceName=${encodeURIComponent(trimmed)}`,
+          {
+            method: "PUT",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+          }
+        );
+      } catch {
+        // Best-effort rename
+      }
     }
 
-    if (!pendingLogin) {
-      setDeviceDialogOpen(false);
-      return;
-    }
-
-    localStorage.setItem(pendingLogin.deviceStorageKey, trimmedDeviceName);
-    const { usernameOrEmail, password } = pendingLogin;
-    setPendingLogin(null);
     setDeviceDialogOpen(false);
-    await loginWithDeviceName(usernameOrEmail, password, trimmedDeviceName);
+    router.push(pendingRedirect || "/hr");
   };
 
   return (
@@ -320,4 +325,3 @@ const HRLoginForm = () => {
 };
 
 export default HRLoginForm;
-

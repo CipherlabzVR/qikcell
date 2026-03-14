@@ -29,17 +29,27 @@ const SignInForm = () => {
   const [loginNote, setLoginNote] = useState("");
   const [deviceDialogOpen, setDeviceDialogOpen] = useState(false);
   const [deviceNameInput, setDeviceNameInput] = useState("");
-  const [pendingLogin, setPendingLogin] = useState(null);
+  const [loginResult, setLoginResult] = useState(null);
   const router = useRouter();
 
-  const loginWithDeviceName = async (email, password, deviceName) => {
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    const email = data.get("email");
+    const password = data.get("password");
+
+    if (!email || !password) {
+      setShowError(true);
+      return;
+    }
+
     setLoginNote("");
 
     try {
       const response = await fetch(`${BASE_URL}/User/SignIn`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ Email: email, Password: password, DeviceName: deviceName }),
+        body: JSON.stringify({ Email: email, Password: password, DeviceName: getDeviceName() }),
       });
       const responseData = await response.json();
 
@@ -47,14 +57,16 @@ const SignInForm = () => {
         throw new Error(responseData.message || "Login failed");
       }
 
-      localStorage.setItem("token", responseData.result.accessToken);
-      localStorage.setItem("user", responseData.result.email);
-      localStorage.setItem("userid", responseData.result.id);
-      localStorage.setItem("name", responseData.result.firstName);
-      localStorage.setItem("type", responseData.result.userType);
-      localStorage.setItem("warehouse", responseData.result.warehouseId);
-      localStorage.setItem("company", responseData.result.companyId);
-      localStorage.setItem("role", responseData.result.userRole);
+      const result = responseData.result;
+
+      localStorage.setItem("token", result.accessToken);
+      localStorage.setItem("user", result.email);
+      localStorage.setItem("userid", result.id);
+      localStorage.setItem("name", result.firstName);
+      localStorage.setItem("type", result.userType);
+      localStorage.setItem("warehouse", result.warehouseId);
+      localStorage.setItem("company", result.companyId);
+      localStorage.setItem("role", result.userRole);
 
       sessionStorage.removeItem("holidayGreetingShown");
       sessionStorage.setItem("justLoggedIn", "true");
@@ -62,10 +74,17 @@ const SignInForm = () => {
       fetch(`${BASE_URL}/Company/CreateCompanyHostingFeeIfDue`, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${responseData.result.accessToken}`,
+          Authorization: `Bearer ${result.accessToken}`,
           "Content-Type": "application/json",
         },
       }).catch(() => {});
+
+      if (result.isNewDevice) {
+        setLoginResult(result);
+        setDeviceNameInput(getDeviceName());
+        setDeviceDialogOpen(true);
+        return;
+      }
 
       router.push("/");
       window.location.reload();
@@ -81,53 +100,34 @@ const SignInForm = () => {
     }
   };
 
-  const handleSubmit = async (event) => {
-    event.preventDefault();
-    const data = new FormData(event.currentTarget);
-    const email = data.get("email");
-    const password = data.get("password");
-
-    if (!email || !password) {
-      setShowError(true);
-      return;
-    }
-
-    const normalizedEmail = String(email).trim().toLowerCase();
-    const deviceStorageKey = `rememberedDeviceName:${normalizedEmail}`;
-    const rememberedDeviceName = localStorage.getItem(deviceStorageKey);
-
-    if (rememberedDeviceName) {
-      await loginWithDeviceName(email, password, rememberedDeviceName);
-      return;
-    }
-
-    setPendingLogin({ email, password, deviceStorageKey });
-    setDeviceNameInput(getDeviceName());
-    setDeviceDialogOpen(true);
-  };
-
   const handleDeviceDialogCancel = () => {
     setDeviceDialogOpen(false);
-    setPendingLogin(null);
+    router.push("/");
+    window.location.reload();
   };
 
   const handleDeviceDialogConfirm = async () => {
-    const trimmedDeviceName = deviceNameInput.trim();
-    if (!trimmedDeviceName) {
-      toast.error("Device name is required to remember this device.");
-      return;
+    const trimmed = deviceNameInput.trim();
+    if (!trimmed || !loginResult) return;
+
+    try {
+      await fetch(
+        `${BASE_URL}/User/RenameCurrentDevice?newDeviceName=${encodeURIComponent(trimmed)}`,
+        {
+          method: "PUT",
+          headers: {
+            Authorization: `Bearer ${loginResult.accessToken}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+    } catch {
+      // Best-effort rename
     }
 
-    if (!pendingLogin) {
-      setDeviceDialogOpen(false);
-      return;
-    }
-
-    localStorage.setItem(pendingLogin.deviceStorageKey, trimmedDeviceName);
-    const { email, password } = pendingLogin;
-    setPendingLogin(null);
     setDeviceDialogOpen(false);
-    await loginWithDeviceName(email, password, trimmedDeviceName);
+    router.push("/");
+    window.location.reload();
   };
 
   return (
