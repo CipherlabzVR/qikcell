@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Box, Typography, Grid, Button, Chip } from "@mui/material";
+import { Box, Typography, Grid, Button, Chip, Pagination } from "@mui/material";
 import Card from "@mui/material/Card";
 import PhotoCamera from "@mui/icons-material/PhotoCamera";
 import DeleteIcon from "@mui/icons-material/Delete";
@@ -15,7 +15,9 @@ const PersonalInformation = () => {
   const [user, setUser] = useState(null);
   const [devices, setDevices] = useState([]);
   const [activeSection, setActiveSection] = useState("personal");
+  const [activityPage, setActivityPage] = useState(1);
   const userEmail = typeof window !== "undefined" ? localStorage.getItem("user") : "";
+  const ACTIVITY_PAGE_SIZE = 10;
 
   const fetchUser = async () => {
     try {
@@ -93,6 +95,12 @@ const PersonalInformation = () => {
       description: "Update your account security settings.",
       icon: <SettingsOutlinedIcon fontSize="small" />,
     },
+    {
+      value: "login-activities",
+      label: "Login Activities",
+      description: "Review your recent login and activity timeline.",
+      icon: <DevicesOutlinedIcon fontSize="small" />,
+    },
   ];
 
   const activeSectionDetails = sections.find((section) => section.value === activeSection) || sections[0];
@@ -152,6 +160,40 @@ const PersonalInformation = () => {
     }
 
     return date.toLocaleString();
+  };
+
+  const getLoginActivities = () => {
+    const activities = [];
+
+    devices.forEach((device) => {
+      const deviceName = device.deviceName || "Unknown Device";
+      const loginTime = device.createdOn;
+      const lastActiveTime = device.updatedOn || device.createdOn;
+
+      if (loginTime) {
+        activities.push({
+          id: `${device.id}-login`,
+          type: "Login",
+          deviceName,
+          ipAddress: device.ipAddress || "N/A",
+          timestamp: loginTime,
+          isCurrentDevice: Boolean(device.isCurrentDevice),
+        });
+      }
+
+      if (device.updatedOn && device.updatedOn !== device.createdOn) {
+        activities.push({
+          id: `${device.id}-active`,
+          type: "Last Activity",
+          deviceName,
+          ipAddress: device.ipAddress || "N/A",
+          timestamp: lastActiveTime,
+          isCurrentDevice: Boolean(device.isCurrentDevice),
+        });
+      }
+    });
+
+    return activities.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
   };
 
   const renderPersonalSection = () => (
@@ -334,11 +376,97 @@ const PersonalInformation = () => {
                   Last Active: {formatDate(device.updatedOn || device.createdOn)}
                 </Typography>
               </Box>
-
             </Box>
           </Grid>
         ))}
       </Grid>
+    );
+  };
+
+  const renderLoginActivitiesSection = () => {
+    const loginActivities = getLoginActivities();
+    const totalPages = Math.max(1, Math.ceil(loginActivities.length / ACTIVITY_PAGE_SIZE));
+    const currentPage = Math.min(activityPage, totalPages);
+    const startIndex = (currentPage - 1) * ACTIVITY_PAGE_SIZE;
+    const paginatedActivities = loginActivities.slice(startIndex, startIndex + ACTIVITY_PAGE_SIZE);
+
+    if (loginActivities.length === 0) {
+      return (
+        <Box
+          sx={{
+            border: "1px dashed #CBD5E1",
+            borderRadius: "16px",
+            p: 4,
+            textAlign: "center",
+            backgroundColor: "#F8FAFC",
+          }}
+        >
+          <Typography sx={{ fontWeight: 600, mb: 1 }}>No login activities found</Typography>
+          <Typography color="text.secondary">
+            Login and activity events will appear here.
+          </Typography>
+        </Box>
+      );
+    }
+
+    return (
+      <Box
+        sx={{
+          border: "1px solid #EEF0F7",
+          borderRadius: "16px",
+          p: { xs: 2, md: 2.5 },
+          backgroundColor: "#fff",
+        }}
+        className="for-dark-bottom-border"
+      >
+        <Box sx={{ display: "grid", gap: 1.5 }}>
+          {paginatedActivities.map((activity) => (
+            <Box
+              key={activity.id}
+              sx={{
+                border: "1px solid #EEF0F7",
+                borderRadius: "12px",
+                p: 1.5,
+                backgroundColor: "#FAFBFF",
+              }}
+            >
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap", mb: 0.5 }}>
+                <Chip
+                  size="small"
+                  label={activity.type}
+                  color={activity.type === "Login" ? "primary" : "default"}
+                  variant={activity.type === "Login" ? "filled" : "outlined"}
+                />
+                {activity.isCurrentDevice && (
+                  <Chip size="small" label="Current Device" color="success" variant="outlined" />
+                )}
+              </Box>
+              <Typography sx={{ fontSize: "14px", fontWeight: 600 }}>
+                {activity.deviceName}
+              </Typography>
+              <Typography sx={{ fontSize: "13px", color: "text.secondary" }}>
+                IP: {activity.ipAddress}
+              </Typography>
+              <Typography sx={{ fontSize: "13px", color: "text.secondary" }}>
+                Time: {formatDate(activity.timestamp)}
+              </Typography>
+            </Box>
+          ))}
+        </Box>
+
+        <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mt: 2, gap: 2, flexWrap: "wrap" }}>
+          <Typography sx={{ fontSize: "13px", color: "text.secondary" }}>
+            Showing {startIndex + 1}-{Math.min(startIndex + ACTIVITY_PAGE_SIZE, loginActivities.length)} of {loginActivities.length}
+          </Typography>
+          <Pagination
+            count={totalPages}
+            page={currentPage}
+            color="primary"
+            size="small"
+            onChange={(_, page) => setActivityPage(page)}
+          />
+        </Box>
+      </Box>
     );
   };
 
@@ -418,7 +546,12 @@ const PersonalInformation = () => {
                   <Button
                     key={section.value}
                     fullWidth
-                    onClick={() => setActiveSection(section.value)}
+                    onClick={() => {
+                      setActiveSection(section.value);
+                      if (section.value === "login-activities") {
+                        setActivityPage(1);
+                      }
+                    }}
                     startIcon={section.icon}
                     variant={activeSection === section.value ? "contained" : "text"}
                     sx={{
@@ -456,6 +589,7 @@ const PersonalInformation = () => {
             {activeSection === "personal" && renderPersonalSection()}
             {activeSection === "devices" && renderDevicesSection()}
             {activeSection === "settings" && renderSettingsSection()}
+            {activeSection === "login-activities" && renderLoginActivitiesSection()}
           </Grid>
         </Grid>
       </Card>

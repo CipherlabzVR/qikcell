@@ -31,6 +31,8 @@ import {
   Typography,
 } from "@mui/material";
 import BASE_URL from "Base/api";
+import { useRouter } from "next/router";
+import logoutUser from "@/components/utils/logoutUser";
 
 const validationSchema = Yup.object().shape({
   FirstName: Yup.string().required("First Name is required"),
@@ -63,6 +65,7 @@ const confirmModalStyle = {
 };
 
 export default function EditUserDialog({ item, fetchItems, warehouses, roles }) {
+  const router = useRouter();
   const [open, setOpen] = React.useState(false);
   const [scroll, setScroll] = React.useState("paper");
   const [userTypes, setUserTypes] = useState([]);
@@ -140,6 +143,42 @@ export default function EditUserDialog({ item, fetchItems, warehouses, roles }) 
     setSelectedDevice(null);
   };
 
+  const parseResponseBody = async (response) => {
+    const contentType = response.headers.get("content-type") || "";
+    const responseText = await response.text();
+
+    if (!responseText) {
+      return null;
+    }
+
+    if (contentType.includes("application/json")) {
+      try {
+        return JSON.parse(responseText);
+      } catch (error) {
+        console.error("Failed to parse JSON response:", error);
+        return null;
+      }
+    }
+
+    return null;
+  };
+
+  const buildErrorMessage = (response, data, fallbackMessage) => {
+    if (data?.message) {
+      return data.message;
+    }
+
+    if (response.status === 401) {
+      return "Your session has expired. Please sign in again.";
+    }
+
+    if (response.status === 403) {
+      return "You do not have permission to perform this action.";
+    }
+
+    return fallbackMessage;
+  };
+
   const fetchLoggedInDevices = async () => {
     try {
       setLoadingDevices(true);
@@ -154,10 +193,12 @@ export default function EditUserDialog({ item, fetchItems, warehouses, roles }) 
         }
       );
 
-      const data = await response.json();
+      const data = await parseResponseBody(response);
 
-      if (!response.ok || data.statusCode !== 200) {
-        throw new Error(data.message || "Failed to fetch devices");
+      if (!response.ok || data?.statusCode !== 200) {
+        throw new Error(
+          buildErrorMessage(response, data, "Failed to fetch devices")
+        );
       }
 
       setDevices(data.result || []);
@@ -189,24 +230,41 @@ export default function EditUserDialog({ item, fetchItems, warehouses, roles }) 
 
     try {
       setRemovingDeviceId(selectedDevice.id);
-      const response = await fetch(
-        `${BASE_URL}/User/RemoveLoggedInDeviceByUserId?userId=${item.id}&deviceId=${selectedDevice.id}`,
-        {
+      const removeDeviceUrl = `${BASE_URL}/User/RemoveLoggedInDeviceByUserId?userId=${item.id}&deviceId=${selectedDevice.id}`;
+      const requestHeaders = {
+        Authorization: `Bearer ${localStorage.getItem("token")}`,
+        "Content-Type": "application/json",
+      };
+
+      let response = await fetch(removeDeviceUrl, {
+        method: "DELETE",
+        headers: requestHeaders,
+      });
+
+      // Some environments expose this endpoint as POST instead of DELETE.
+      if (response.status === 405) {
+        response = await fetch(removeDeviceUrl, {
           method: "POST",
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("token")}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
-
-      const data = await response.json();
-
-      if (!response.ok || data.statusCode !== 200) {
-        throw new Error(data.message || "Failed to remove device");
+          headers: requestHeaders,
+        });
       }
 
-      toast.success(data.message);
+      const data = await parseResponseBody(response);
+
+      if (!response.ok || data?.statusCode !== 200) {
+        throw new Error(
+          buildErrorMessage(response, data, "Failed to remove device")
+        );
+      }
+
+      toast.success(data?.message || "Device removed successfully");
+
+      if (selectedDevice?.isCurrentDevice) {
+        toast.info("Current device removed. Signing out...");
+        await logoutUser({ router });
+        return;
+      }
+
       setConfirmRemoveOpen(false);
       setSelectedDevice(null);
       fetchLoggedInDevices();
