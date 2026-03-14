@@ -190,11 +190,12 @@ export default function EditUserDialog({ item, fetchItems, warehouses, roles }) 
     try {
       setRemovingDeviceId(selectedDevice.id);
       const response = await fetch(
-        `${BASE_URL}/User/RemoveLoggedInDeviceByUserIdAndDeviceId?userId=${item.id}&deviceId=${selectedDevice.id}`,
+        `${BASE_URL}/User/RemoveLoggedInDeviceByUserId?userId=${item.id}&deviceId=${selectedDevice.id}`,
         {
-          method: "GET",
+          method: "DELETE",
           headers: {
             Authorization: `Bearer ${localStorage.getItem("token")}`,
+            "Content-Type": "application/json",
           },
         }
       );
