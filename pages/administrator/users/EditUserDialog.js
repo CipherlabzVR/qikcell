@@ -192,7 +192,7 @@ export default function EditUserDialog({ item, fetchItems, warehouses, roles }) 
       const response = await fetch(
         `${BASE_URL}/User/RemoveLoggedInDeviceByUserId?userId=${item.id}&deviceId=${selectedDevice.id}`,
         {
-          method: "DELETE",
+          method: "POST",
           headers: {
             Authorization: `Bearer ${localStorage.getItem("token")}`,
             "Content-Type": "application/json",
