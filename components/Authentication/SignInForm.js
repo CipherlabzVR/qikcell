@@ -111,7 +111,7 @@ const SignInForm = () => {
     if (!trimmed || !loginResult) return;
 
     try {
-      await fetch(
+      const response = await fetch(
         `${BASE_URL}/User/RenameCurrentDevice?newDeviceName=${encodeURIComponent(trimmed)}`,
         {
           method: "PUT",
@@ -119,10 +119,15 @@ const SignInForm = () => {
             Authorization: `Bearer ${loginResult.accessToken}`,
             "Content-Type": "application/json",
           },
+          body: JSON.stringify({ NewDeviceName: trimmed }),
         }
       );
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        toast.error(data?.message || "Could not save device name. You can continue anyway.");
+      }
     } catch {
-      // Best-effort rename
+      toast.error("Could not save device name. You can continue anyway.");
     }
 
     setDeviceDialogOpen(false);

@@ -35,8 +35,12 @@ import { useRouter } from "next/router";
 import logoutUser from "@/components/utils/logoutUser";
 
 const validationSchema = Yup.object().shape({
-  FirstName: Yup.string().required("First Name is required"),
-  LastName: Yup.string().required("Last Name is required"),
+  FirstName: Yup.string()
+    .matches(/^[a-zA-Z\s]+$/, "First Name must contain only letters")
+    .required("First Name is required"),
+  LastName: Yup.string()
+    .matches(/^[a-zA-Z\s]+$/, "Last Name must contain only letters")
+    .required("Last Name is required"),
   Email: Yup.string().email("Invalid email").required("Email is required"),
   Address: Yup.string().required("Address is required"),
   MobileNumber: Yup.string()
@@ -236,18 +240,10 @@ export default function EditUserDialog({ item, fetchItems, warehouses, roles }) 
         "Content-Type": "application/json",
       };
 
-      let response = await fetch(removeDeviceUrl, {
-        method: "DELETE",
+      const response = await fetch(removeDeviceUrl, {
+        method: "POST",
         headers: requestHeaders,
       });
-
-      // Some environments expose this endpoint as POST instead of DELETE.
-      if (response.status === 405) {
-        response = await fetch(removeDeviceUrl, {
-          method: "POST",
-          headers: requestHeaders,
-        });
-      }
 
       const data = await parseResponseBody(response);
 

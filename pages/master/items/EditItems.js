@@ -20,6 +20,7 @@ import TextField from "@mui/material/TextField";
 import { Field, Form, Formik } from "formik";
 import * as Yup from "yup";
 import BASE_URL from "Base/api";
+import { useRouter } from "next/router";
 import { toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import BorderColorIcon from "@mui/icons-material/BorderColor";
@@ -27,6 +28,7 @@ import CloudUploadIcon from "@mui/icons-material/CloudUpload";
 import DeleteIcon from "@mui/icons-material/Delete";
 import DownloadIcon from "@mui/icons-material/Download";
 import AddIcon from "@mui/icons-material/Add";
+import IsAppSettingEnabled from "@/components/utils/IsAppSettingEnabled";
 
 // Controlled Category Modal Component
 const CreateCategoryModal = ({ open, onClose, fetchItems, IsEcommerceWebSiteAvailable }) => {
@@ -687,7 +689,20 @@ const validationSchema = Yup.object().shape({
   UOM: Yup.number().required("Unit of Measure is required"),
 });
 
-export default function EditItems({ fetchItems, item, isPOSSystem, uoms, isGarmentSystem, chartOfAccounts, barcodeEnabled, IsEcommerceWebSiteAvailable }) {
+export default function EditItems({
+  fetchItems,
+  item,
+  isPOSSystem,
+  uoms,
+  isGarmentSystem,
+  chartOfAccounts,
+  barcodeEnabled,
+  IsEcommerceWebSiteAvailable,
+  onDuplicateRequest,
+  approve1 = false,
+}) {
+  const router = useRouter();
+  const { data: isItemEndInvolveEnable } = IsAppSettingEnabled("IsItemEndInvolveEnable");
   const [open, setOpen] = React.useState(false);
   const [subImages, setSubImages] = useState([]); // { id, preview|imgUrl, file?, price, description, isExisting }
   const [subImageIdsToRemove, setSubImageIdsToRemove] = useState([]);
@@ -706,6 +721,7 @@ export default function EditItems({ fetchItems, item, isPOSSystem, uoms, isGarme
           imgUrl: s.imgUrl ?? s.ImgUrl ?? "",
           price: s.price ?? s.Price ?? "",
           description: s.description ?? s.Description ?? "",
+          isOutOfStock: !!(s.isOutOfStock ?? s.IsOutOfStock),
           isExisting: true,
         }));
         setSubImages(existing);
@@ -725,6 +741,18 @@ export default function EditItems({ fetchItems, item, isPOSSystem, uoms, isGarme
     });
     setSubImageIdsToRemove([]);
     setOpen(false);
+  };
+  const handleDuplicateItem = () => {
+    localStorage.setItem("duplicateItemId", String(item.id));
+    handleClose();
+    if (onDuplicateRequest) {
+      onDuplicateRequest();
+    } else {
+      router.push({
+        pathname: "/master/items/",
+        query: { duplicate: "1", t: String(Date.now()) },
+      });
+    }
   };
   const [selectedCat, setSelectedCat] = useState();
   const [categoryList, setCategoryList] = useState([]);
@@ -946,6 +974,7 @@ export default function EditItems({ fetchItems, item, isPOSSystem, uoms, isGarme
         file,
         price: "",
         description: "",
+        isOutOfStock: false,
         isExisting: false,
       });
     }
@@ -1002,7 +1031,26 @@ export default function EditItems({ fetchItems, item, isPOSSystem, uoms, isGarme
       return;
     }
 
-    
+    const wp =
+      values.WholesalePrice !== null && values.WholesalePrice !== ""
+        ? Number(values.WholesalePrice)
+        : NaN;
+    const wq =
+      values.WholesaleMinimumQuantity !== null && values.WholesaleMinimumQuantity !== ""
+        ? Number(values.WholesaleMinimumQuantity)
+        : NaN;
+    if (Number.isFinite(wp) && wp > 0) {
+      if (!Number.isFinite(wq) || wq <= 0) {
+        toast.warning("Enter wholesale minimum quantity when wholesale price is set.");
+        return;
+      }
+    }
+    if (Number.isFinite(wq) && wq > 0) {
+      if (!Number.isFinite(wp) || wp <= 0) {
+        toast.warning("Enter wholesale price when wholesale minimum quantity is set.");
+        return;
+      }
+    }
 
     const formData = new FormData();
 
@@ -1010,6 +1058,16 @@ export default function EditItems({ fetchItems, item, isPOSSystem, uoms, isGarme
     formData.append("Name", values.Name);
     formData.append("Code", values.Code);
     formData.append("AveragePrice", values.AveragePrice);
+    formData.append(
+      "WholesalePrice",
+      values.WholesalePrice !== null && values.WholesalePrice !== "" ? values.WholesalePrice : "",
+    );
+    formData.append(
+      "WholesaleMinimumQuantity",
+      values.WholesaleMinimumQuantity !== null && values.WholesaleMinimumQuantity !== ""
+        ? values.WholesaleMinimumQuantity
+        : "",
+    );
     formData.append("ShipmentTarget", values.ShipmentTarget ? values.ShipmentTarget : "");
     formData.append("ReorderLevel", values.ReorderLevel ?values.ReorderLevel : "");
     formData.append("CategoryId", values.CategoryId);
@@ -1029,6 +1087,8 @@ export default function EditItems({ fetchItems, item, isPOSSystem, uoms, isGarme
     formData.append("IsNonInventoryItem", values.IsNonInventoryItem);
     formData.append("HasSerialNumbers", values.HasSerialNumbers);
     formData.append("IsWebView", values.IsWebView);
+    formData.append("IsOutOfStock", values.IsOutOfStock);
+    formData.append("IsItemEndInvolve", values.IsItemEndInvolve);
     formData.append("ProductImage", selectedFile ? selectedFile : null);
     (subImages || []).forEach((s) => {
       if (s.file) formData.append("SubImages", s.file);
@@ -1040,9 +1100,22 @@ export default function EditItems({ fetchItems, item, isPOSSystem, uoms, isGarme
         return {
           price: !isNaN(priceVal) ? priceVal : null,
           description: (s.description || "").trim() || null,
+          isOutOfStock: !!s.isOutOfStock,
         };
       });
     formData.append("SubImagesMeta", JSON.stringify(subImagesMeta));
+    const existingSubImagesMeta = (subImages || [])
+      .filter((s) => s.isExisting && typeof s.id === "number")
+      .map((s) => {
+        const priceVal = s.price !== "" && s.price != null ? parseFloat(s.price) : NaN;
+        return {
+          id: s.id,
+          price: !isNaN(priceVal) ? priceVal : null,
+          description: (s.description || "").trim() || null,
+          isOutOfStock: !!s.isOutOfStock,
+        };
+      });
+    formData.append("ExistingSubImagesMeta", JSON.stringify(existingSubImagesMeta));
     if (subImageIdsToRemove.length > 0) {
       formData.append("SubImageIdsToRemove", subImageIdsToRemove.join(","));
     }
@@ -1096,6 +1169,8 @@ export default function EditItems({ fetchItems, item, isPOSSystem, uoms, isGarme
               Name: item.name || "",
               Code: item.code || "",
               AveragePrice: item.averagePrice || null,
+              WholesalePrice: item.wholesalePrice ?? null,
+              WholesaleMinimumQuantity: item.wholesaleMinimumQuantity ?? null,
               CategoryId: item.categoryId || "",
               SubCategoryId: item.subCategoryId || "",
               ShipmentTarget: item.shipmentTarget || null,
@@ -1111,6 +1186,8 @@ export default function EditItems({ fetchItems, item, isPOSSystem, uoms, isGarme
               IsNonInventoryItem: item.isNonInventoryItem,
               HasSerialNumbers: item.hasSerialNumbers,
               IsWebView: item.isWebView,
+              IsOutOfStock: item.isOutOfStock || false,
+              IsItemEndInvolve: item.isItemEndInvolve || false,
               Description: item.description
             }}
             validationSchema={validationSchema}
@@ -1123,15 +1200,33 @@ export default function EditItems({ fetchItems, item, isPOSSystem, uoms, isGarme
               <Form>
                 <Grid container>
                   <Grid item xs={12} mb={2}>
-                    <Typography
-                      variant="h5"
+                    <Box
                       sx={{
-                        fontWeight: "500",
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
                         mb: "5px",
                       }}
                     >
-                      Edit Item
-                    </Typography>
+                      <Typography
+                        variant="h5"
+                        sx={{
+                          fontWeight: "500",
+                        }}
+                      >
+                        Edit Item
+                      </Typography>
+                      {approve1 ? (
+                        <Button
+                          type="button"
+                          variant="contained"
+                          size="small"
+                          onClick={handleDuplicateItem}
+                        >
+                          Duplicate
+                        </Button>
+                      ) : null}
+                    </Box>
                   </Grid>
                   <Grid item xs={12} mb={2}>
                     <Tabs value={tabValue} onChange={handleTabChange} aria-label="item tabs">
@@ -1336,7 +1431,7 @@ export default function EditItems({ fetchItems, item, isPOSSystem, uoms, isGarme
                         </Box>
                       </Grid>
 
-                      {isPOSSystem && (
+                      {IsEcommerceWebSiteAvailable && (
                         <>
                           <Grid item xs={12} mt={1} lg={6} p={1}>
                             <Typography
@@ -1353,6 +1448,52 @@ export default function EditItems({ fetchItems, item, isPOSSystem, uoms, isGarme
                               fullWidth
                               name="AveragePrice"
                               size="small"
+                            />
+                          </Grid>
+                          <Grid item xs={12} mt={1} lg={6} p={1}>
+                            <Typography
+                              sx={{
+                                fontWeight: "500",
+                                fontSize: "14px",
+                                mb: "5px",
+                              }}
+                            >
+                              Wholesale price
+                            </Typography>
+                            <Field
+                              as={TextField}
+                              fullWidth
+                              name="WholesalePrice"
+                              size="small"
+                              type="number"
+                              inputProps={{ min: 0, step: "any" }}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                setFieldValue("WholesalePrice", value === "" ? null : value);
+                              }}
+                            />
+                          </Grid>
+                          <Grid item xs={12} mt={1} lg={6} p={1}>
+                            <Typography
+                              sx={{
+                                fontWeight: "500",
+                                fontSize: "14px",
+                                mb: "5px",
+                              }}
+                            >
+                              Wholesale minimum quantity
+                            </Typography>
+                            <Field
+                              as={TextField}
+                              fullWidth
+                              name="WholesaleMinimumQuantity"
+                              size="small"
+                              type="number"
+                              inputProps={{ min: 0, step: "any" }}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                setFieldValue("WholesaleMinimumQuantity", value === "" ? null : value);
+                              }}
                             />
                           </Grid>
                         </>
@@ -1687,6 +1828,22 @@ export default function EditItems({ fetchItems, item, isPOSSystem, uoms, isGarme
                               />
                             </Grid>
                           )}
+
+                          {isItemEndInvolveEnable && (
+                            <Grid item xs={12} lg={6} mt={1}>
+                              <FormControlLabel
+                                control={
+                                  <Field
+                                    as={Checkbox}
+                                    name="IsItemEndInvolve"
+                                    checked={values.IsItemEndInvolve}
+                                    onChange={() => setFieldValue("IsItemEndInvolve", !values.IsItemEndInvolve)}
+                                  />
+                                }
+                                label="Is Item End Involve"
+                              />
+                            </Grid>
+                          )}
                         </Grid>
                       </Grid>
                     </Grid>
@@ -1787,6 +1944,20 @@ export default function EditItems({ fetchItems, item, isPOSSystem, uoms, isGarme
                               </Box>
                             </Grid>
                           </Grid>
+                          {IsEcommerceWebSiteAvailable && (
+                            <FormControlLabel
+                              sx={{ mt: 1, display: "block" }}
+                              control={
+                                <Field
+                                  as={Checkbox}
+                                  name="IsOutOfStock"
+                                  checked={values.IsOutOfStock}
+                                  onChange={() => setFieldValue("IsOutOfStock", !values.IsOutOfStock)}
+                                />
+                              }
+                              label="Out of Stock (main image)"
+                            />
+                          )}
                         </Grid>
                       )}
                       
@@ -1808,6 +1979,20 @@ export default function EditItems({ fetchItems, item, isPOSSystem, uoms, isGarme
                             <Typography variant="body2" color="textSecondary">
                               Click "Choose Image" button to upload
                             </Typography>
+                            {IsEcommerceWebSiteAvailable && (
+                              <FormControlLabel
+                                sx={{ mt: 2, justifyContent: "center" }}
+                                control={
+                                  <Field
+                                    as={Checkbox}
+                                    name="IsOutOfStock"
+                                    checked={values.IsOutOfStock}
+                                    onChange={() => setFieldValue("IsOutOfStock", !values.IsOutOfStock)}
+                                  />
+                                }
+                                label="Out of Stock (main image)"
+                              />
+                            )}
                           </Box>
                         </Grid>
                       )}
@@ -1907,6 +2092,21 @@ export default function EditItems({ fetchItems, item, isPOSSystem, uoms, isGarme
                                       value={s.description ?? ""}
                                       onChange={(e) => updateSubImageMeta(s.id, "description", e.target.value)}
                                     />
+                                    {IsEcommerceWebSiteAvailable && (
+                                      <FormControlLabel
+                                        sx={{ mt: 0.5, alignItems: "flex-start", ml: 0 }}
+                                        control={
+                                          <Checkbox
+                                            size="small"
+                                            checked={!!s.isOutOfStock}
+                                            onChange={(e) =>
+                                              updateSubImageMeta(s.id, "isOutOfStock", e.target.checked)
+                                            }
+                                          />
+                                        }
+                                        label="Out of Stock"
+                                      />
+                                    )}
                                   </Box>
                                 </Box>
                               </Grid>

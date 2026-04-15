@@ -142,6 +142,7 @@ const HRLoginForm = () => {
               Authorization: `Bearer ${token}`,
               "Content-Type": "application/json",
             },
+            body: JSON.stringify({ NewDeviceName: trimmed }),
           }
         );
       } catch {
