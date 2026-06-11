@@ -579,7 +579,7 @@ const ProformaInvoiceReport = ({ proformaInvoice, onShareSuccess }) => {
 
       if (IsShareWhatsAppAPIThrough) {
         try {
-          const apiUrl = `https://api.textmebot.com/send.php?recipient=${phoneNumber}&apikey=781LrdZkpdLh&document=${encodeURIComponent(url)}`;
+          const apiUrl = `${process.env.NEXT_PUBLIC_WHATSAPP_API_URL}?recipient=${phoneNumber}&apikey=${process.env.NEXT_PUBLIC_WHATSAPP_API_KEY}&document=${encodeURIComponent(url)}`;
           const response = await fetch(apiUrl, {
             method: "GET",
             mode: 'no-cors',

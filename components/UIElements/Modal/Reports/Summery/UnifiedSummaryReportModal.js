@@ -249,6 +249,18 @@ const reportConfigs = {
       item: { enabled: true, required: false, label: "Select Item", paramName: "item", allowAll: false },
     },
   },
+  MatrimonialProfileQualityReport: {
+    title: "Matrimonial Profile Quality Report",
+    fields: {},
+  },
+  MatrimonialSubscriptionSummaryReport: {
+    title: "Matrimonial Subscription Summary Report",
+    fields: {},
+  },
+  MatrimonialEngagementSummaryReport: {
+    title: "Matrimonial Engagement Summary Report",
+    fields: {},
+  },
 };
 
 export default function UnifiedSummaryReportModal({ reportName, docName }) {

@@ -11,6 +11,7 @@ import AudienceOverview from "./AudienceOverview";
 import OutstandingCustomers from "./OutstandingCustomers";
 import ShippingTargetData from "./ShippingTargetData";
 import IsPermissionEnabled from "@/components/utils/IsPermissionEnabled";
+import useDashboardWidgetPermissions from "@/components/utils/useDashboardWidgetPermissions";
 import { formatCurrency, formatDateWithTime } from "@/components/utils/formatHelper";
 
 const MAIN_DASHBOARD_CATEGORY_ID = 39;
@@ -20,6 +21,7 @@ export default function Dashboard() {
   const [outstandingCustomers, setOutstandingCustomers] = useState([]);
   const [activeShifts, setActiveShifts] = useState([]);
   const { approve1: hasApprovalLevel1 } = IsPermissionEnabled(MAIN_DASHBOARD_CATEGORY_ID);
+  const widgets = useDashboardWidgetPermissions();
 
   const fetchIncomeDetails = async () => {
     try {
@@ -111,7 +113,7 @@ export default function Dashboard() {
         </ul>
       </div>
 
-      <Features features={features} />
+      {widgets.paymentSummary && <Features features={features} />}
 
       <Grid
         container
@@ -119,12 +121,12 @@ export default function Dashboard() {
         columnSpacing={{ xs: 1, sm: 1, md: 1, lg: 1, xl: 2 }}
       >
         <Grid item xs={12} md={12} lg={6} xl={6}>
-          {hasApprovalLevel1 && <AudienceOverview />}
+          {widgets.salesSummary && hasApprovalLevel1 && <AudienceOverview />}
           {/* <TotalItems /> */}
-          <ShippingTargetData />
+          {widgets.shippingTarget && <ShippingTargetData />}
         </Grid>
         <Grid item xs={12} md={12} lg={6} xl={6}>
-          {activeShifts.length > 0 && (
+          {widgets.activeShifts && activeShifts.length > 0 && (
             <Grid container>
               <Grid item xs={12} mb={2}>
                 <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
@@ -167,8 +169,8 @@ export default function Dashboard() {
               </Grid>
             </Grid>
           )}
-          <OutstandingCustomers outstandingCustomers={outstandingCustomers} />
-          <SalesAnalytics />
+          {widgets.outstandingCustomers && <OutstandingCustomers outstandingCustomers={outstandingCustomers} />}
+          {widgets.stockBalance && <SalesAnalytics />}
 
         </Grid>
       </Grid>

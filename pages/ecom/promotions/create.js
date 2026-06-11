@@ -15,6 +15,7 @@ import {
   getValidProductItemDiscountRows,
   getValidTotalAmountRows,
   isPromotionApiSuccess,
+  toPromotionCategoryEnum,
   validateProductItemDiscountForm,
 } from "@/components/eCommerce/promotions/promotionConfig";
 
@@ -53,7 +54,7 @@ function buildBasePayload(values) {
   return {
     name: values.Name,
     description: values.Description || null,
-    promotionCategory: values.PromotionCategory,
+    promotionCategory: toPromotionCategoryEnum(values.PromotionCategory),
     promotionType: values.PromotionType,
     couponCode: couponOn
       ? (values.CouponCode || "").trim() || null

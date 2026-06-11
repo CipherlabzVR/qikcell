@@ -82,11 +82,36 @@ function a11yProps(index) {
   };
 }
 
+function createDefaultDressingRows() {
+  return [
+    { DressingType: 1, label: "Bride", StartTime: "", EndTime: "", Remark: "" },
+    { DressingType: 2, label: "Maids", StartTime: "", EndTime: "", Remark: "" },
+    { DressingType: 3, label: "Touch Up", StartTime: "", EndTime: "", Remark: "" },
+    { DressingType: 4, label: "Touch Up 2", StartTime: "", EndTime: "", Remark: "" },
+    { DressingType: 5, label: "Going Away", StartTime: "", EndTime: "", Remark: "" },
+    { DressingType: 6, label: "Home Coming", StartTime: "", EndTime: "", Remark: "" },
+  ];
+}
+
+function createDefaultAppointments() {
+  return [
+    { AppointmentType: 1, label: "First", StartDate: "", EndDate: "", IsAppointmentTypeChecked: false, Remark: "", isDisabled: false },
+    { AppointmentType: 2, label: "Show Saree", StartDate: "", EndDate: "", IsAppointmentTypeChecked: false, Remark: "", isDisabled: true },
+    { AppointmentType: 3, label: "Fabric & Design", StartDate: "", EndDate: "", IsAppointmentTypeChecked: false, Remark: "", isDisabled: true },
+    { AppointmentType: 4, label: "Measurement", StartDate: "", EndDate: "", IsAppointmentTypeChecked: false, Remark: "", isDisabled: true },
+    { AppointmentType: 5, label: "Fiton", StartDate: "", EndDate: "", IsAppointmentTypeChecked: false, Remark: "", isDisabled: true },
+    { AppointmentType: 6, label: "Trail", StartDate: "", EndDate: "", IsAppointmentTypeChecked: false, Remark: "", isDisabled: true },
+  ];
+}
+
 export default function AddReservation({ fetchItems, documentNo ,approve1}) {
   const [open, setOpen] = useState(false);
   const [isGoingAway, setIsGoingAway] = useState(false);
   const [isHomeComing, setIsHomeComing] = useState(false);
-  const handleOpen = () => setOpen(true);
+  const handleOpen = () => {
+    resetFields();
+    setOpen(true);
+  };
   const theme = useTheme();
   const textFieldRef = useRef(null);
   const [value, setValue] = useState(0);
@@ -102,90 +127,10 @@ export default function AddReservation({ fetchItems, documentNo ,approve1}) {
   const [paymentCode, setPaymentCode] = useState("");
   const [paymentDate, setPaymentDate] = useState("");
   const { data, getCustomersByName } = useGetList();
-  const [dressingRows, setDressingRows] = useState([
-    { DressingType: 1, label: "Bride", StartTime: "", EndTime: "", Remark: "" },
-    { DressingType: 2, label: "Maids", StartTime: "", EndTime: "", Remark: "" },
-    { DressingType: 3, label: "Touch Up", StartTime: "", EndTime: "", Remark: "" },
-    {
-      DressingType: 4,
-      label: "Touch Up 2",
-      StartTime: "",
-      EndTime: "",
-      Remark: "",
-    },
-    {
-      DressingType: 5,
-      label: "Going Away",
-      StartTime: "",
-      EndTime: "",
-      Remark: "",
-    },
-    {
-      DressingType: 6,
-      label: "Home Coming",
-      StartTime: "",
-      EndTime: "",
-      Remark: "",
-    },
-  ]);
+  const [dressingRows, setDressingRows] = useState(() => createDefaultDressingRows());
   const [nextAppointment, setNextAppointment] = useState(1);
 
-  const [appointments, setAppointments] = useState([
-    {
-      AppointmentType: 1,
-      label: "First",
-      StartDate: "",
-      EndDate: "",
-      IsAppointmentTypeChecked: false,
-      Remark: "",
-      isDisabled: false,
-    },
-    {
-      AppointmentType: 2,
-      label: "Show Saree",
-      StartDate: "",
-      EndDate: "",
-      IsAppointmentTypeChecked: false,
-      Remark: "",
-      isDisabled: true,
-    },
-    {
-      AppointmentType: 3,
-      label: "Fabric & Design",
-      StartDate: "",
-      EndDate: "",
-      IsAppointmentTypeChecked: false,
-      Remark: "",
-      isDisabled: true,
-    },
-    {
-      AppointmentType: 4,
-      label: "Measurement",
-      StartDate: "",
-      EndDate: "",
-      IsAppointmentTypeChecked: false,
-      Remark: "",
-      isDisabled: true,
-    },
-    {
-      AppointmentType: 5,
-      label: "Fiton",
-      StartDate: "",
-      EndDate: "",
-      IsAppointmentTypeChecked: false,
-      Remark: "",
-      isDisabled: true,
-    },
-    {
-      AppointmentType: 6,
-      label: "Trail",
-      StartDate: "",
-      EndDate: "",
-      IsAppointmentTypeChecked: false,
-      Remark: "",
-      isDisabled: true,
-    },
-  ]);
+  const [appointments, setAppointments] = useState(() => createDefaultAppointments());
 
   const handleInputChange = (index, field, value) => {
     const updatedRows = dressingRows.map((row, i) =>
@@ -325,7 +270,7 @@ export default function AddReservation({ fetchItems, documentNo ,approve1}) {
       if (responseData.statusCode === 200) {
         toast.success(responseData.message || responseData.result?.message || "Success");
         setOpen(false);
-        setSelectedCustomer(null);
+        resetFields();
         fetchItems();
       } else {
         toast.error(responseData.message || responseData.result?.message || "An error occurred");
@@ -367,17 +312,79 @@ export default function AddReservation({ fetchItems, documentNo ,approve1}) {
     setShowDropdown(false);
     setPaymentCode("");
     setPaymentDate("");
+    setIsGoingAway(false);
+    setIsHomeComing(false);
+    setHomeComingDateValue("");
+    setHomeComingBridalTypeValue(1);
+    setHomeComingLocationValue(1);
+    setHomeComingPreferedTimeValue(1);
+    setNextAppointment(1);
+    setDressingRows(createDefaultDressingRows());
+    setAppointments(createDefaultAppointments());
   };
 
   const handleCustomerSelect = (customer) => {
+    let mergedDressing = createDefaultDressingRows();
+    if (Array.isArray(customer.reservationDressingTime) && customer.reservationDressingTime.length > 0) {
+      mergedDressing = mergedDressing.map((row) => {
+        const match = customer.reservationDressingTime.find(
+          (r) => r.dressingType === row.DressingType
+        );
+        return match
+          ? {
+              ...row,
+              StartTime: match.startTime || "",
+              EndTime: match.endTime || "",
+              Remark: match.remark || "",
+            }
+          : row;
+      });
+    }
+    setDressingRows(mergedDressing);
+
+    let nextApp = 1;
+    if (Array.isArray(customer.reservationAppointment) && customer.reservationAppointment.length > 0) {
+      const sorted = [...customer.reservationAppointment].sort(
+        (a, b) => (a.appointmentType || 0) - (b.appointmentType || 0)
+      );
+      let lastChecked = 0;
+      const mergedRows = createDefaultAppointments().map((row, idx) => {
+        const match = sorted.find((r) => r.appointmentType === row.AppointmentType);
+        if (match) {
+          if (match.isAppointmentTypeChecked) lastChecked = idx + 1;
+          return {
+            ...row,
+            IsAppointmentTypeChecked: match.isAppointmentTypeChecked || false,
+            StartDate: match.startDate ? formatDate(match.startDate) : "",
+            EndDate: match.endDate ? formatDate(match.endDate) : "",
+            Remark: match.remark || "",
+          };
+        }
+        return row;
+      });
+      setAppointments(
+        mergedRows.map((row, idx) => ({
+          ...row,
+          isDisabled: idx === 0 ? false : idx > lastChecked,
+        }))
+      );
+      nextApp = customer.nextAppointmentType || lastChecked + 1 || 1;
+    } else {
+      setAppointments(createDefaultAppointments());
+    }
+    setNextAppointment(nextApp);
+
     setSelectedCustomer(customer);
-    var isHomecoming = customer.reservationFunctionType === 3 ? true : false;
+    const details = customer.reservationDetails || {};
+    var isHomecoming = details.isHomeComing ?? (customer.reservationFunctionType === 3);
+    var isGoingAwayValue = details.isGoingAway ?? false;
     setIsHomeComing(isHomecoming);
-    var value = customer.homeComingDate ? customer.homeComingDate : "";
+    setIsGoingAway(isGoingAwayValue);
+    var value = details.homeComingDate || customer.homeComingDate || "";
     var bridal = customer.homeComingBridleType ? customer.homeComingBridleType : 1;
     var location = customer.homeComingLocation ? customer.homeComingLocation : 1;
     var pref = customer.homeComingPreferredTime ? customer.homeComingPreferredTime : 1;
-    setHomeComingDateValue(formatDate(value))
+    setHomeComingDateValue(value ? formatDate(value) : "");
     setHomeComingBridalTypeValue(bridal);
     setHomeComingLocationValue(location);
     setHomeComingPreferedTimeValue(pref);
@@ -411,58 +418,61 @@ export default function AddReservation({ fetchItems, documentNo ,approve1}) {
       >
         <Box sx={style} className="bg-black">
           <Formik
+            enableReinitialize
             initialValues={{
-              Id: 0,
+              Id: selectedCustomer?.id || 0,
               DocumentNo: documentNo,
               ReservationDate: selectedCustomer ? selectedCustomer.reservationDate : "",
               ReservationFunctionType: selectedCustomer ? selectedCustomer.reservationFunctionType : null,
               CustomerName: selectedCustomer ? selectedCustomer.customerName : "",
-              GroomName: "",
-              Description: "",
+              GroomName: selectedCustomer?.groomName || "",
+              Description: selectedCustomer?.description || "",
               MobileNo: selectedCustomer ? selectedCustomer.mobileNo : "",
-              EmergencyContactNo: "",
+              EmergencyContactNo: selectedCustomer?.emergencyContactNo || "",
               NIC: selectedCustomer?.nic || "",
-              PreferdTime: 0,
-              BridleType: 0,
-              Location: 0,
-              HomeComingBridleType: 1,
-              HomeComingLocation: 1,
-              HomeComingPreferredTime: 1,
-              Type: 0,
-              IsExpire: false,
-              ExpireProcessDate: "",
-              NextAppointmentType: 0,
+              PreferdTime: selectedCustomer?.preferdTime || 0,
+              BridleType: selectedCustomer?.bridleType || 0,
+              Location: selectedCustomer?.location || 0,
+              HomeComingBridleType: selectedCustomer?.homeComingBridleType || 1,
+              HomeComingLocation: selectedCustomer?.homeComingLocation || 1,
+              HomeComingPreferredTime: selectedCustomer?.homeComingPreferredTime || 1,
+              Type: selectedCustomer?.type || 0,
+              IsExpire: selectedCustomer?.isExpire || false,
+              ExpireProcessDate: selectedCustomer?.expireProcessDate || "",
+              NextAppointmentType: selectedCustomer?.nextAppointmentType || 0,
               ReservationDetails: {
-                WeddingVenue: "",
-                DressingVenue: "",
-                AddressLine1: "",
-                AddressLine2: "",
-                AddressLine3: "",
-                WeddingDayContactPerson: "",
-                WeddingDayContactPersonNo: "",
-                Remark: "",
-                IsGoingAway: false,
-                IsHomeComing: false,
-                HomeComingDate: "",
-                HomeComingVenue: "",
-                HomeComingOutfit: "",
-                HomeComingOutfitBy: "",
-                GoingAwayDressingVenue: "",
-                GroomsOutfit: "",
-                GroomsOutfitBy: "",
-                MaidsOutfitBy: "",
-                GAOutfitBy: "",
-                BouquetsBy: "",
-                WedOutfit: "",
-                WedOutfitBy: "",
-                FGOutfit: "",
-                FGOutfitBy: "",
-                HCOutfitBy: "",
-                Photographer: "",
-                Maids: 0,
-                LittleMaids: 0,
-                FlowerGirls: 0,
-                PupilMaids: 0,
+                WeddingVenue: selectedCustomer?.reservationDetails?.weddingVenue || "",
+                DressingVenue: selectedCustomer?.reservationDetails?.dressingVenue || "",
+                AddressLine1: selectedCustomer?.reservationDetails?.addressLine1 || "",
+                AddressLine2: selectedCustomer?.reservationDetails?.addressLine2 || "",
+                AddressLine3: selectedCustomer?.reservationDetails?.addressLine3 || "",
+                WeddingDayContactPerson: selectedCustomer?.reservationDetails?.weddingDayContactPerson || "",
+                WeddingDayContactPersonNo: selectedCustomer?.reservationDetails?.weddingDayContactPersonNo || "",
+                Remark: selectedCustomer?.reservationDetails?.remark || "",
+                IsGoingAway: selectedCustomer?.reservationDetails?.isGoingAway || false,
+                IsHomeComing: selectedCustomer?.reservationDetails?.isHomeComing || false,
+                HomeComingDate: selectedCustomer?.reservationDetails?.homeComingDate || "",
+                HomeComingVenue: selectedCustomer?.reservationDetails?.homeComingVenue || "",
+                HomeComingOutfit: selectedCustomer?.reservationDetails?.homeComingOutfit || "",
+                HomeComingOutfitBy: selectedCustomer?.reservationDetails?.homeComingOutfitBy || "",
+                GoingAwayDressingVenue: selectedCustomer?.reservationDetails?.goingAwayDressingVenue || "",
+                GoingAwayOutfit: selectedCustomer?.reservationDetails?.goingAwayOutfit || "",
+                GoingAwayOutfitBy: selectedCustomer?.reservationDetails?.goingAwayOutfitBy || "",
+                GroomsOutfit: selectedCustomer?.reservationDetails?.groomsOutfit || "",
+                GroomsOutfitBy: selectedCustomer?.reservationDetails?.groomsOutfitBy || "",
+                MaidsOutfitBy: selectedCustomer?.reservationDetails?.maidsOutfitBy || "",
+                GAOutfitBy: selectedCustomer?.reservationDetails?.gaOutfitBy || "",
+                BouquetsBy: selectedCustomer?.reservationDetails?.bouquetsBy || "",
+                WedOutfit: selectedCustomer?.reservationDetails?.wedOutfit || "",
+                WedOutfitBy: selectedCustomer?.reservationDetails?.wedOutfitBy || "",
+                FGOutfit: selectedCustomer?.reservationDetails?.fgOutfit || "",
+                FGOutfitBy: selectedCustomer?.reservationDetails?.fgOutfitBy || "",
+                HCOutfitBy: selectedCustomer?.reservationDetails?.hcOutfitBy || "",
+                Photographer: selectedCustomer?.reservationDetails?.photographer || "",
+                Maids: selectedCustomer?.reservationDetails?.maids || 0,
+                LittleMaids: selectedCustomer?.reservationDetails?.littleMaids || 0,
+                FlowerGirls: selectedCustomer?.reservationDetails?.flowerGirls || 0,
+                PupilMaids: selectedCustomer?.reservationDetails?.pupilMaids || 0,
               }
             }}
             onSubmit={(values) => {

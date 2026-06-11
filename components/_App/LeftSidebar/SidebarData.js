@@ -12,6 +12,7 @@ import {
     AssignmentTurnedIn as ProjectIcon,
 } from "@mui/icons-material";
 import ReceiptIcon from '@mui/icons-material/Receipt';
+import SubjectIcon from '@mui/icons-material/Subject';
 import InventoryIcon from '@mui/icons-material/Inventory';
 import { ProjectNo } from "Base/catelogue";
 import DescriptionIcon from "@mui/icons-material/Description";
@@ -26,7 +27,9 @@ import SupportAgentIcon from '@mui/icons-material/SupportAgent';
 import StorefrontIcon from '@mui/icons-material/Storefront';
 import WorkIcon from '@mui/icons-material/Work';
 import FactoryIcon from '@mui/icons-material/Factory';
+import TravelExploreIcon from '@mui/icons-material/TravelExplore';
 import TrackChangesIcon from '@mui/icons-material/TrackChanges';
+import FavoriteIcon from '@mui/icons-material/Favorite';
 
 
 export const getSidebarData = (IsGarmentSystem) => {
@@ -247,6 +250,26 @@ export const getSidebarData = (IsGarmentSystem) => {
                 { title: "Goods Return Note", path: "/inventory/grn-return/", categoryId: 77, isAvailable: true },
                 { title: "Stock Details", path: "/inventory/stock-details/", categoryId: 156, isAvailable: true },
                 { title: "Stock Cycle Count", path: "/inventory/stock-cycle-count/", categoryId: 162, isAvailable: true },
+                { title: "Stock Count Schedule", path: "/inventory/stock-count-schedule/", categoryId: 199, isAvailable: true },
+            ],
+        },
+        {
+            title: "Assets",
+            path: "/assets/assets/",
+            icon: <SubjectIcon />,
+            iconClosed: <ArrowRight />,
+            iconOpened: <ArrowDown />,
+            ModuleId: 26,
+            IsAvailable: true,
+            subNav: [
+                { title: "Asset Categories", path: "/assets/category/", categoryId: 177, isAvailable: true },
+                { title: "Asset Locations", path: "/assets/location/", categoryId: 178, isAvailable: true },
+                { title: "Assets", path: "/assets/asset/", categoryId: 179, isAvailable: true },
+                { title: "Asset Maintenance", path: "/assets/maintenance/", categoryId: 182, isAvailable: true },
+                { title: "Work Orders", path: "/assets/work-orders/", categoryId: 183, isAvailable: true },
+                { title: "Asset Transfers", path: "/assets/assetTrasfer/", categoryId: 184, isAvailable: true },
+                { title: "Depreciation", path: "/assets/depreciation/", categoryId: 185, isAvailable: true },
+                { title: "Asset Disposals", path: "/assets/asset-disposals/", categoryId: 186, isAvailable: true },
             ],
         },
         {
@@ -258,7 +281,7 @@ export const getSidebarData = (IsGarmentSystem) => {
             ModuleId: 3,
             IsAvailable: true,
             subNav: [
-                { title: "Invoice", path: "/sales/invoice/", categoryId: 22, isAvailable: true },
+                { title: "Invoice", path: "/sales/invoice/", categoryId: 22, isAvailable: true },                
                 { title: "Customer Credit/Debit Notes", path: "/sales/credit-note/", categoryId: 23, isAvailable: true },
                 { title: "Receipt", path: "/sales/receipt/", categoryId: 24, isAvailable: true },
                 { title: "Shift", path: "/sales/shift/", categoryId: 26, isAvailable: true },
@@ -270,6 +293,8 @@ export const getSidebarData = (IsGarmentSystem) => {
                 { title: "Shift Summary", path: "/sales/summary/", categoryId: 104, isAvailable: true },
                 { title: "Cash In/Out", path: "/sales/cash-in-out/", categoryId: 117, isAvailable: true },
                 { title: "Bank Payments", path: "/sales/bank-payments/", categoryId: 118, isAvailable: true },
+                { title: "Sales Order", path: "/sales/sales-order/", categoryId: 180, isAvailable: true },
+                { title: "Sales Quotation", path: "/sales/sales-quotation/", categoryId: 181, isAvailable: true },
             ],
         },
         {
@@ -294,6 +319,8 @@ export const getSidebarData = (IsGarmentSystem) => {
             IsAvailable: true,
             subNav: [
                 { title: "Bill Of Material", path: "/production/bom/", categoryId: 14, isAvailable: true },
+                { title: "Recipe", path: "/production/recipe/", categoryId: 197, isAvailable: true },
+                { title: "Production Order", path: "/production/production-order/", categoryId: 198, isAvailable: true },
             ],
         },
         {
@@ -355,6 +382,18 @@ export const getSidebarData = (IsGarmentSystem) => {
                 { title: "Bookings", path: "/reservation/booking/", categoryId: 67, isAvailable: true },
                 { title: "Reserved Slots", path: "/reservation/reserved-slots/", categoryId: 68, isAvailable: true },
             ],
+        },
+        {
+            title: "Reserved Customers",
+            path: "/reserved-customers/",
+            icon: <People />,
+            iconClosed: <ArrowRight />,
+            iconOpened: <ArrowDown />,
+            ModuleId: 28,
+            IsAvailable: true,
+            subNav: [
+                { title: "Reserved Customers", path: "/reserved-customers/", categoryId: 196, isAvailable: true },
+            ],
         }, {
             title: "Reports",
             path: "/reports/reports/",
@@ -368,6 +407,7 @@ export const getSidebarData = (IsGarmentSystem) => {
                 { title: "Summary Reports", path: "/reports/summery-report/", categoryId: 29, isAvailable: true },
                 { title: "Customer Outstanding", path: "/reports/outstanding/", categoryId: 30, isAvailable: true },
                 { title: "Reservation Reports", path: "/reservation/reports/", categoryId: 50, isAvailable: true },
+                { title: "Stock Count Report", path: "/reports/stock-count-report/", categoryId: 200, isAvailable: true },
             ],
         },
         {
@@ -440,6 +480,42 @@ export const getSidebarData = (IsGarmentSystem) => {
             subNav: [
                 { title: "Work Track", path: "/work-track/", categoryId: 153, isAvailable: true },
                 { title: "Technician", path: "/work-track/technician/", categoryId: 154, isAvailable: true }
+            ],
+        },
+        {
+            title: "Matrimonial",
+            path: "/matrimonial/matrimonials/",
+            icon: <FavoriteIcon />,
+            iconClosed: <ArrowRight />,
+            iconOpened: <ArrowDown />,
+            ModuleId: 25,
+            IsAvailable: true,
+            subNav: [
+                { title: "Dashboard", path: "/matrimonial/dashboard/", categoryId: 175, isAvailable: true },
+                { title: "Registered Accounts", path: "/matrimonial/matrimonial/", categoryId: 172, isAvailable: true },
+                { title: "Bank Transfer Approvals", path: "/matrimonial/bank-transfers/", categoryId: 173, isAvailable: true },
+                { title: "Success Stories", path: "/matrimonial/success-stories/", categoryId: 174, isAvailable: true },
+                //{ title: "Packages", path: "/matrimonial/packages/", categoryId: 176, isAvailable: true },
+            ],
+        },
+        {
+            title: "Travel",
+            path: "/travel/travel/",
+            icon: <TravelExploreIcon />,
+            iconClosed: <ArrowRight />,
+            iconOpened: <ArrowDown />,
+            ModuleId: 27,
+            IsAvailable: true,
+            subNav: [
+                { title: "Destinations", path: "/travel/destinations/", categoryId: 187, isAvailable: true },
+                { title: "Packages", path: "/travel/packages/", categoryId: 190, isAvailable: true },
+                { title: "Predefined Packages", path: "/travel/predefined-packages/", categoryId: 194, isAvailable: true },
+                { title: "Hotels", path: "/travel/hotels/", categoryId: 191, isAvailable: true },
+                { title: "Vehicles", path: "/travel/vehicles/", categoryId: 192, isAvailable: true },
+                { title: "Hotel Master", path: "/travel/hotel-master/", categoryId: 193, isAvailable: true },
+                { title: "Contact Inquiries", path: "/travel/contact-inquiries/", categoryId: 188, isAvailable: true },
+                { title: "Newsletter", path: "/travel/newsletter/", categoryId: 189, isAvailable: true },
+                { title: "Settings", path: "/travel/settings/", categoryId: 195, isAvailable: true },
             ],
         }, {
             title: "Administrator",

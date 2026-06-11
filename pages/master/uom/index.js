@@ -100,7 +100,11 @@ export default function UnitOfMeasure() {
           justifyContent="end"
           order={{ xs: 1, lg: 2 }}
         >
-          {create ? <AddUOM fetchItems={fetchUOMList} /> : ""}
+          {create ? (
+            <AddUOM fetchItems={() => fetchUOMList()} />
+          ) : (
+            ""
+          )}
         </Grid>
         <Grid item xs={12} order={{ xs: 3, lg: 3 }}>
           <TableContainer component={Paper}>

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Button from "@mui/material/Button";
 import Dialog from "@mui/material/Dialog";
 import {
@@ -21,8 +21,18 @@ import "react-toastify/dist/ReactToastify.css";
 import * as Yup from "yup";
 import BASE_URL from "Base/api";
 import IsAppSettingEnabled from "@/components/utils/IsAppSettingEnabled";
+import {
+  getNicBirthYearErrorMessage,
+  getDateOfBirthYearErrorMessage,
+  normalizeNicInput,
+} from "@/components/utils/nicBirthYearValidation";
+import { isValidContactPhone } from "@/components/utils/contactPhoneValidation";
 
-const getValidationSchema = (isCustomerNICRequired, isCustomerCreditLimitRequired) => Yup.object().shape({
+const getValidationSchema = (
+  isCustomerNICRequired,
+  isCustomerCreditLimitRequired,
+  birthdateForValidation = ""
+) => Yup.object().shape({
   Title: Yup.string().required("Title is required"),
   FirstName: Yup.string().required("First Name is required"),
   LastName: Yup.string(),
@@ -36,32 +46,50 @@ const getValidationSchema = (isCustomerNICRequired, isCustomerCreditLimitRequire
         .required("Credit Limit is required")
         .moreThan(0, "Credit Limit must be greater than 0")
     : Yup.number().min(0, "Credit Limit must be a positive number").nullable(),
-  NIC: Yup.string().test(
-    "nic-format",
-    function (value) {
-      if (!value || value.trim() === "") {
-        // If NIC is required, show error; otherwise allow empty
+  NIC: Yup.string()
+    .test("nic-format", function (value) {
+      const digits = String(value ?? "").replace(/\D/g, "");
+      if (digits.length === 0) {
         if (isCustomerNICRequired) {
           return this.createError({ message: "NIC is required" });
         }
-        return true; // Allow empty NIC
+        return true;
       }
-      // Validate format if value is provided
-      if (!/^\d{9}(\d{3})?$/.test(value)) {
-        return this.createError({ message: "NIC must be either 9 or 12 digits long" });
+      if (!/^\d{9}(\d{3})?$/.test(digits)) {
+        return this.createError({ message: "Invalid NIC" });
       }
       return true;
-    }
-  ),
-  DateOfBirth: Yup.date().nullable(),
+    })
+    .test("nic-birth-year", function (value) {
+      const digits = String(value ?? "").replace(/\D/g, "");
+      if (digits.length === 0 || !/^\d{9}(\d{3})?$/.test(digits)) {
+        return true;
+      }
+      const msg = getNicBirthYearErrorMessage(digits);
+      if (msg) return this.createError({ message: msg });
+      return true;
+    }),
+  DateOfBirth: Yup.mixed()
+    .nullable()
+    .test("dob-year-plausible", function () {
+      const raw =
+        (birthdateForValidation && String(birthdateForValidation).trim()) ||
+        (this.parent.DateOfBirth && String(this.parent.DateOfBirth).trim()) ||
+        "";
+      if (!raw) return true;
+      const msg = getDateOfBirthYearErrorMessage(raw);
+      if (msg) return this.createError({ message: msg });
+      return true;
+    }),
   CustomerContactDetails: Yup.array().of(
     Yup.object().shape({
       ContactName: Yup.string().required("Contact Name is required"),
       EmailAddress: Yup.string().email("Invalid email address"),
-      ContactNo: Yup.string()
-        .matches(/^\d+$/, "Contact No must contain only digits"),
-
-
+      ContactNo: Yup.string().test(
+        "contact-phone",
+        "Invalid contact number",
+        (value) => isValidContactPhone(value)
+      ),
 
     })
   ),
@@ -83,6 +111,16 @@ export default function AddCustomerDialog({ fetchItems, chartOfAccounts, externa
   const [birthdate, setBirthdate] = useState("");
   const [formKey, setFormKey] = useState(0);
   const [distributorList, setDistributorList] = useState([]);
+
+  const customerValidationSchema = useMemo(
+    () =>
+      getValidationSchema(
+        isCustomerNICRequired,
+        isCustomerCreditLimit,
+        birthdate
+      ),
+    [isCustomerNICRequired, isCustomerCreditLimit, birthdate]
+  );
 
   const fetchTitleList = async () => {
     try {
@@ -218,7 +256,7 @@ export default function AddCustomerDialog({ fetchItems, chartOfAccounts, externa
   }, [open]);
 
   const handleSubmit = (values) => {
-    values.NIC = values.NIC || "";
+    values.NIC = normalizeNicInput(values.NIC || "");
     values.DateOfBirth = birthdate || null;
     values.LastName = values.LastName ? values.LastName : "-";
     const token = localStorage.getItem("token");
@@ -252,7 +290,12 @@ export default function AddCustomerDialog({ fetchItems, chartOfAccounts, externa
             }
           }
         } else {
-          toast.error(data.message);
+          let msg = data.message || "Customer creation failed.";
+          if (/inner exception|saving the entity changes/i.test(msg)) {
+            msg =
+              "Save failed: date of birth is not always inferred from the NIC. Enter the correct date of birth manually, verify the NIC, and try again.";
+          }
+          toast.error(msg);
         }
       })
       .catch((error) => {
@@ -261,56 +304,76 @@ export default function AddCustomerDialog({ fetchItems, chartOfAccounts, externa
         );
       });
   };
-  const calculateBirthdateFromNIC = (value) => {
+  const calculateBirthdateFromNIC = (value, setFieldValue) => {
+    const norm = normalizeNicInput(String(value ?? ""));
+    const digits = norm.replace(/\D/g, "");
+
+    if (!norm || digits.length === 0) {
+      setBirthdate("");
+      if (setFieldValue) setFieldValue("DateOfBirth", "");
+      return;
+    }
+
+    if (digits.length !== 9 && digits.length !== 12) {
+      return;
+    }
+
     let year, number;
-    if (value.length === 9 || value.length === 12) {
-      if (value.length === 9) {
-        year = parseInt(value.slice(0, 2), 10);
-        number = parseInt(value.slice(2, 5), 10);
-        let currentYear = new Date().getFullYear();
-        let prefix = Math.floor(currentYear / 100) * 100;
-        let threshold = 50;
+    if (digits.length === 9) {
+      year = parseInt(digits.slice(0, 2), 10);
+      number = parseInt(digits.slice(2, 5), 10);
+      let currentYear = new Date().getFullYear();
+      let prefix = Math.floor(currentYear / 100) * 100;
+      let threshold = 50;
 
-        if (year <= threshold) {
-          year = prefix + year;
-        } else {
-          year = prefix - 100 + year;
-        }
-      } else if (value.length === 12) {
-        year = parseInt(value.slice(0, 4), 10);
-        number = parseInt(value.slice(4, 7), 10);
+      if (year <= threshold) {
+        year = prefix + year;
+      } else {
+        year = prefix - 100 + year;
       }
+    } else {
+      year = parseInt(digits.slice(0, 4), 10);
+      number = parseInt(digits.slice(4, 7), 10);
+    }
 
-      if (number > 500) {
-        number -= 500;
+    if (getNicBirthYearErrorMessage(norm)) {
+      setBirthdate("");
+      if (setFieldValue) setFieldValue("DateOfBirth", "");
+      return;
+    }
+
+    if (number > 500) {
+      number -= 500;
+      if (!isLeapYear(year)) {
+        number -= 1;
+      }
+    } else {
+      if (number > 59) {
         if (!isLeapYear(year)) {
           number -= 1;
         }
-      } else {
-        if (number > 59) {
-          if (!isLeapYear(year)) {
-            number -= 1;
-          }
-        }
       }
-
-      const date = new Date(year, 0);
-      date.setDate(number);
-      const month = date.getMonth() + 1;
-      const day = date.getDate();
-      const formattedDate = `${year}-${month.toString().padStart(2, "0")}-${day
-        .toString()
-        .padStart(2, "0")}`;
-      setBirthdate(formattedDate);
-      return formattedDate;
     }
+
+    const date = new Date(year, 0);
+    date.setDate(number);
+    const month = date.getMonth() + 1;
+    const day = date.getDate();
+    const formattedDate = `${year}-${month.toString().padStart(2, "0")}-${day
+      .toString()
+      .padStart(2, "0")}`;
+    setBirthdate(formattedDate);
+    if (setFieldValue) setFieldValue("DateOfBirth", formattedDate);
+    return formattedDate;
   };
 
   const isLeapYear = (year) => {
     return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
   };
-  const handleChange = (event) => {
-    setBirthdate(event.target.value);
+  const handleChange = (event, setFieldValue) => {
+    const v = event.target.value;
+    setBirthdate(v);
+    if (setFieldValue) setFieldValue("DateOfBirth", v);
   };
 
   return (
@@ -364,11 +427,11 @@ export default function AddCustomerDialog({ fetchItems, chartOfAccounts, externa
                   ContactNo: "",
                 })),
               }}
-              validationSchema={getValidationSchema(isCustomerNICRequired, isCustomerCreditLimit)}
+              validationSchema={customerValidationSchema}
               onSubmit={handleSubmit}
               enableReinitialize
             >
-              {({ errors, touched, values, setFieldValue }) => (
+              {({ errors, touched, values, setFieldValue, validateField }) => (
                 <Form>
                   <Grid container>
                     <Grid item xs={12}>
@@ -555,9 +618,18 @@ export default function AddCustomerDialog({ fetchItems, chartOfAccounts, externa
                               name="NIC"
                               error={touched.NIC && Boolean(errors.NIC)}
                               helperText={touched.NIC && errors.NIC}
-                              onChange={(e) => {
-                                setFieldValue("NIC", e.target.value);
-                                calculateBirthdateFromNIC(e.target.value);
+                              onChange={async (e) => {
+                                const nicValue = normalizeNicInput(
+                                  e.target.value ?? ""
+                                );
+                                await setFieldValue("NIC", nicValue, true);
+                                calculateBirthdateFromNIC(
+                                  nicValue,
+                                  setFieldValue
+                                );
+                                await Promise.resolve();
+                                await validateField("NIC");
+                                await validateField("DateOfBirth");
                               }}
                             />
                           </Grid>
@@ -583,7 +655,7 @@ export default function AddCustomerDialog({ fetchItems, chartOfAccounts, externa
                               }
                               helperText={touched.DateOfBirth && errors.DateOfBirth}
                               value={birthdate}
-                              onChange={handleChange}
+                              onChange={(e) => handleChange(e, setFieldValue)}
                             />
                           </Grid>
                           <Grid lg={6} item xs={12}>

@@ -25,7 +25,9 @@ export default function EditSetting({ item, fetchItems }) {
     const payload = {
       ...values,
       Value:
-        item.settingName === "AutoLogoutTimeMinutes" && values.Value !== undefined && values.Value !== null
+        (item.settingName === "AutoLogoutTimeMinutes" || item.settingName === "ProformaInvoiceUnitEditTolerance") &&
+        values.Value !== undefined &&
+        values.Value !== null
           ? String(values.Value)
           : values.Value,
     };
@@ -126,12 +128,14 @@ export default function EditSetting({ item, fetchItems }) {
                         type={
                           item.settingName === "IsBackDateEnabled"
                             ? "datetime-local"
-                            : item.settingName === "AutoLogoutTimeMinutes"
+                            : item.settingName === "AutoLogoutTimeMinutes" ||
+                              item.settingName === "ProformaInvoiceUnitEditTolerance"
                             ? "number"
                             : "text"
                         }
                         inputProps={
-                          item.settingName === "AutoLogoutTimeMinutes"
+                          item.settingName === "AutoLogoutTimeMinutes" ||
+                          item.settingName === "ProformaInvoiceUnitEditTolerance"
                             ? { inputMode: "numeric", pattern: "\\d*", min: 0 }
                             : undefined
                         }

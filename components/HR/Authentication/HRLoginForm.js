@@ -18,7 +18,9 @@ import { toast } from "react-toastify";
 import { useRouter } from "next/router";
 import "react-toastify/dist/ReactToastify.css";
 import getDeviceName from "@/components/utils/getDeviceName";
+import { getDeviceIdentity } from "@/components/utils/getDeviceId";
 import DeviceNameDialog from "@/components/Authentication/DeviceNameDialog";
+import { touchSessionActivity } from "@/components/utils/logoutUser";
 
 const HRLoginForm = () => {
   const [showError, setShowError] = useState(false);
@@ -85,6 +87,7 @@ const HRLoginForm = () => {
 
       sessionStorage.removeItem("holidayGreetingShown");
       sessionStorage.setItem("justLoggedIn", "true");
+      touchSessionActivity();
 
       const needsPasswordReset = result.isPasswordReset === false || result.IsPasswordReset === false;
       const isNewDevice = result.isNewDevice || result.IsNewDevice;
@@ -124,6 +127,7 @@ const HRLoginForm = () => {
 
   const handleDeviceDialogCancel = () => {
     setDeviceDialogOpen(false);
+    touchSessionActivity();
     router.push(pendingRedirect || "/hr");
   };
 
@@ -132,25 +136,63 @@ const HRLoginForm = () => {
     if (!trimmed) return;
 
     const token = loginResult?.accessToken || loginResult?.AccessToken;
+    const deviceRowId = loginResult?.currentLoggedInDeviceId ?? loginResult?.CurrentLoggedInDeviceId;
+    const isRenameSuccess = (data) => {
+      const sc = data?.statusCode ?? data?.StatusCode;
+      return Number(sc) === 200;
+    };
+
     if (token) {
       try {
-        await fetch(
-          `${BASE_URL}/User/RenameCurrentDevice?newDeviceName=${encodeURIComponent(trimmed)}`,
+        const identity = await getDeviceIdentity();
+        const idQuery =
+          deviceRowId != null
+            ? `&loggedInDeviceIpId=${encodeURIComponent(String(deviceRowId))}`
+            : "";
+        const response = await fetch(
+          `${BASE_URL}/User/RenameCurrentDevice?newDeviceName=${encodeURIComponent(trimmed)}` +
+            `&deviceIdentifier=${encodeURIComponent(identity.deviceIdentifier || "")}` +
+            (identity.deviceFingerprint
+              ? `&deviceFingerprint=${encodeURIComponent(identity.deviceFingerprint)}`
+              : "") +
+            (identity.browserInstanceId
+              ? `&browserInstanceId=${encodeURIComponent(identity.browserInstanceId)}`
+              : "") +
+            idQuery,
           {
-            method: "PUT",
+            method: "POST",
+            credentials: "include",
             headers: {
               Authorization: `Bearer ${token}`,
               "Content-Type": "application/json",
+              ...(identity.deviceFingerprint
+                ? { "X-Device-Fingerprint": identity.deviceFingerprint }
+                : {}),
+              ...(identity.browserInstanceId
+                ? { "X-Browser-Instance-Id": identity.browserInstanceId }
+                : {}),
             },
-            body: JSON.stringify({ NewDeviceName: trimmed }),
+            body: JSON.stringify({
+              NewDeviceName: trimmed,
+              DeviceIdentifier: identity.deviceIdentifier,
+              DeviceId: identity.deviceIdentifier,
+              DeviceFingerprint: identity.deviceFingerprint,
+              BrowserInstanceId: identity.browserInstanceId,
+              ...(deviceRowId != null ? { LoggedInDeviceIpId: deviceRowId } : {}),
+            }),
           }
         );
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || !isRenameSuccess(data)) {
+          toast.error(data?.message || "Could not save device name. You can continue anyway.");
+        }
       } catch {
-        // Best-effort rename
+        toast.error("Could not save device name. You can continue anyway.");
       }
     }
 
     setDeviceDialogOpen(false);
+    touchSessionActivity();
     router.push(pendingRedirect || "/hr");
   };
 

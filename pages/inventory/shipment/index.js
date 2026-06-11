@@ -10,6 +10,7 @@ import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Paper from "@mui/material/Paper";
 import LocalPrintshopIcon from "@mui/icons-material/LocalPrintshop";
+import DescriptionIcon from "@mui/icons-material/Description";
 import { Pagination, Typography, FormControl, InputLabel, MenuItem, Select, Button, IconButton, Tooltip } from "@mui/material";
 import { ToastContainer } from "react-toastify";
 import { Search, StyledInputBase } from "@/styles/main/search-styles";
@@ -22,15 +23,13 @@ import { formatDate } from "@/components/utils/formatHelper";
 import BorderColorIcon from "@mui/icons-material/BorderColor";
 import { Catelogue } from "Base/catelogue";
 import GetReportSettingValueByName from "@/components/utils/GetReportSettingValueByName";
-import IsAppSettingEnabled from "@/components/utils/IsAppSettingEnabled";
 import { Report } from "Base/report";
 
 export default function ShipmentNote() {
   const cId = sessionStorage.getItem("category")
-  const { navigate, create, update, remove, print } = IsPermissionEnabled(cId);
+  const { navigate, create, update, remove, print, customPrint } = IsPermissionEnabled(cId);
   const name = localStorage.getItem("name");
   const { data: ReportName } = GetReportSettingValueByName("ShipmentNote");
-  const { data: isCustomReportsEnabled } = IsAppSettingEnabled("IsCustomReportsEnabled");
 
   const {
     data: shipmentList,
@@ -90,7 +89,6 @@ export default function ShipmentNote() {
       "popup=yes,width=1200,height=900,scrollbars=yes,resizable=yes"
     );
   };
-
 
   if (!navigate) {
     return <AccessDenied />;
@@ -180,29 +178,30 @@ export default function ShipmentNote() {
                               </Tooltip>
                             ) : null
                           ) : (
-                            print ?
+                            (print || customPrint) ? (
                               <>
-                                {isCustomReportsEnabled ? (
-                                  <Tooltip title="Print" placement="top">
+                                {customPrint ? (
+                                  <Tooltip title="Print (Custom)" placement="top">
                                     <a href={`${Report}${reportLink}`} target="_blank" rel="noopener noreferrer">
-                                      <IconButton aria-label="print" size="small">
-                                        <LocalPrintshopIcon color="primary" fontSize="medium" />
+                                      <IconButton aria-label="print custom" size="small">
+                                        <DescriptionIcon color="action" fontSize="medium" />
                                       </IconButton>
                                     </a>
                                   </Tooltip>
-                                ) : (
-                                  <Tooltip title="Print" placement="top">
+                                ) : null}
+                                {print ? (
+                                  <Tooltip title="Print (Default)" placement="top">
                                     <IconButton
-                                      aria-label="print"
+                                      aria-label="print default"
                                       size="small"
                                       onClick={() => openShipmentPrintPopup(item)}
                                     >
                                       <LocalPrintshopIcon color="primary" fontSize="medium" />
                                     </IconButton>
                                   </Tooltip>
-                                )}
+                                ) : null}
                               </>
-                              : null
+                            ) : null
                           )}
                         </TableCell>
                       </TableRow>

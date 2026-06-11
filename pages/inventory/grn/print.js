@@ -285,12 +285,48 @@ export default function GRNPrintPage() {
       ),
     [lineItems]
   );
-  const discountPercent = Number(grnData?.discount ?? 0);
-  const discountAmount = useMemo(() => {
-    const fromHeader = subtotal * (discountPercent / 100);
-    return Number.isNaN(fromHeader) ? 0 : fromHeader;
-  }, [discountPercent, subtotal]);
-  const grossTotal = Number(grnData?.totalAmount ?? subtotal - discountAmount);
+  const sumLineTotals = useMemo(
+    () =>
+      lineItems.reduce(
+        (sum, item) => sum + Number(item.lineTotal ?? 0),
+        0
+      ),
+    [lineItems]
+  );
+  /**
+   * Document-level (manual) order discount.
+   * Prefer the stored header value; if it's missing or zero, derive it from
+   * (sum of line totals - saved totalAmount) so older records still reconcile.
+   */
+  const headerDiscountPercent = Number(grnData?.discount ?? 0);
+  const savedTotalAmount = Number(grnData?.totalAmount ?? NaN);
+  const derivedDiscountAmount = useMemo(() => {
+    if (!Number.isFinite(savedTotalAmount)) return 0;
+    const diff = sumLineTotals - savedTotalAmount;
+    return diff > 0.009 ? diff : 0;
+  }, [sumLineTotals, savedTotalAmount]);
+
+  const orderDiscountAmount = useMemo(() => {
+    if (headerDiscountPercent && !Number.isNaN(headerDiscountPercent)) {
+      const amt = sumLineTotals * (headerDiscountPercent / 100);
+      if (!Number.isNaN(amt) && amt > 0) return amt;
+    }
+    return derivedDiscountAmount;
+  }, [headerDiscountPercent, sumLineTotals, derivedDiscountAmount]);
+
+  const orderDiscountPercent = useMemo(() => {
+    if (headerDiscountPercent && !Number.isNaN(headerDiscountPercent)) {
+      return headerDiscountPercent;
+    }
+    if (sumLineTotals > 0 && orderDiscountAmount > 0) {
+      return (orderDiscountAmount / sumLineTotals) * 100;
+    }
+    return 0;
+  }, [headerDiscountPercent, sumLineTotals, orderDiscountAmount]);
+
+  const grossTotal = Number.isFinite(savedTotalAmount)
+    ? savedTotalAmount
+    : sumLineTotals - orderDiscountAmount;
 
   const companyAddressLines = useMemo(
     () =>
@@ -487,12 +523,12 @@ export default function GRNPrintPage() {
               <Typography sx={{ fontSize: { xs: "0.56rem", sm: "0.8rem" }, fontWeight: 700 }}>{formatAmount(subtotal)}</Typography>
             </Box>
             <Box display="flex" justifyContent="space-between" mb={0.5}>
-              <Typography sx={{ fontSize: { xs: "0.56rem", sm: "0.8rem" }, fontWeight: 700 }}>Discount (%)</Typography>
-              <Typography sx={{ fontSize: { xs: "0.56rem", sm: "0.8rem" }, fontWeight: 700 }}>{formatAmount(discountPercent)}</Typography>
+              <Typography sx={{ fontSize: { xs: "0.56rem", sm: "0.8rem" }, fontWeight: 700 }}>Order Discount (%)</Typography>
+              <Typography sx={{ fontSize: { xs: "0.56rem", sm: "0.8rem" }, fontWeight: 700 }}>{formatAmount(orderDiscountPercent)}</Typography>
             </Box>
             <Box display="flex" justifyContent="space-between" mb={0.5}>
-              <Typography sx={{ fontSize: { xs: "0.56rem", sm: "0.8rem" }, fontWeight: 700 }}>Discount Amount</Typography>
-              <Typography sx={{ fontSize: { xs: "0.56rem", sm: "0.8rem" }, fontWeight: 700 }}>{formatAmount(discountAmount)}</Typography>
+              <Typography sx={{ fontSize: { xs: "0.56rem", sm: "0.8rem" }, fontWeight: 700 }}>Total Discount</Typography>
+              <Typography sx={{ fontSize: { xs: "0.56rem", sm: "0.8rem" }, fontWeight: 700 }}>{formatAmount(orderDiscountAmount)}</Typography>
             </Box>
             <Box display="flex" justifyContent="space-between" pt={0.5} borderTop="2px solid #333">
               <Typography sx={{ fontSize: { xs: "0.56rem", sm: "0.84rem" }, fontWeight: 700 }}>Gross Total</Typography>

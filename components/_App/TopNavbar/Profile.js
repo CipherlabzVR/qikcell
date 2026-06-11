@@ -67,7 +67,7 @@ const Profile = () => {
   };
 
   const navigateToChangePassword = () => {
-    router.push('/change-password/');
+    router.push('/profile/?section=settings');
   };
 
   const navigateToProfile = () => {

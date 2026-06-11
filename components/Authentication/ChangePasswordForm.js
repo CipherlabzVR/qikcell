@@ -1,9 +1,11 @@
-import React from "react";
+import React, { useState } from "react";
 import Grid from "@mui/material/Grid";
-import { Typography } from "@mui/material";
+import { Typography, IconButton, InputAdornment } from "@mui/material";
 import { Box } from "@mui/system";
 import TextField from "@mui/material/TextField";
 import Button from "@mui/material/Button";
+import Visibility from "@mui/icons-material/Visibility";
+import VisibilityOff from "@mui/icons-material/VisibilityOff";
 import { useFormik } from "formik";
 import * as Yup from "yup";
 import BASE_URL from "Base/api";
@@ -57,6 +59,33 @@ const ChangePasswordForm = ({ embedded = false }) => {
     onSubmit: handleSubmit,
   });
 
+  const [showPassword, setShowPassword] = useState({
+    Password: false,
+    NewPassword: false,
+    ConfirmNewPassword: false,
+  });
+
+  const toggleShowPassword = (field) => {
+    setShowPassword((prev) => ({ ...prev, [field]: !prev[field] }));
+  };
+
+  const buildPasswordAdornment = (field) => ({
+    style: { borderRadius: 8 },
+    endAdornment: (
+      <InputAdornment position="end">
+        <IconButton
+          aria-label={`toggle ${field} visibility`}
+          onClick={() => toggleShowPassword(field)}
+          onMouseDown={(e) => e.preventDefault()}
+          edge="end"
+          size="small"
+        >
+          {showPassword[field] ? <VisibilityOff fontSize="small" /> : <Visibility fontSize="small" />}
+        </IconButton>
+      </InputAdornment>
+    ),
+  });
+
   const content = (
     <Grid item xs={12}>
       <Box>
@@ -83,7 +112,7 @@ const ChangePasswordForm = ({ embedded = false }) => {
               <Grid item xs={12}>
                 <TextField
                   name="Password"
-                  type="password"
+                  type={showPassword.Password ? "text" : "password"}
                   required
                   fullWidth
                   label="Current Password"
@@ -97,15 +126,13 @@ const ChangePasswordForm = ({ embedded = false }) => {
                   helperText={
                     formik.touched.Password && formik.errors.Password
                   }
-                  InputProps={{
-                    style: { borderRadius: 8 },
-                  }}
+                  InputProps={buildPasswordAdornment("Password")}
                 />
               </Grid>
               <Grid item xs={12}>
                 <TextField
                   name="NewPassword"
-                  type="password"
+                  type={showPassword.NewPassword ? "text" : "password"}
                   required
                   fullWidth
                   label="New Password"
@@ -119,15 +146,13 @@ const ChangePasswordForm = ({ embedded = false }) => {
                   helperText={
                     formik.touched.NewPassword && formik.errors.NewPassword
                   }
-                  InputProps={{
-                    style: { borderRadius: 8 },
-                  }}
+                  InputProps={buildPasswordAdornment("NewPassword")}
                 />
               </Grid>
               <Grid item xs={12}>
                 <TextField
                   name="ConfirmNewPassword"
-                  type="password"
+                  type={showPassword.ConfirmNewPassword ? "text" : "password"}
                   required
                   fullWidth
                   label="Confirm Password"
@@ -142,9 +167,7 @@ const ChangePasswordForm = ({ embedded = false }) => {
                     formik.touched.ConfirmNewPassword &&
                     formik.errors.ConfirmNewPassword
                   }
-                  InputProps={{
-                    style: { borderRadius: 8 },
-                  }}
+                  InputProps={buildPasswordAdornment("ConfirmNewPassword")}
                 />
               </Grid>
             </Grid>

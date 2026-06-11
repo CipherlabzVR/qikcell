@@ -1,6 +1,14 @@
 import BASE_URL from "Base/api";
 import getDeviceName from "@/components/utils/getDeviceName";
 
+/** Resets client idle tracking so a fresh login is not treated as an expired session. */
+export const touchSessionActivity = () => {
+  if (typeof window === "undefined") {
+    return;
+  }
+  localStorage.setItem("lastActivityTime", String(Date.now()));
+};
+
 const logoutUser = async ({ router, redirectPath = "/authentication/sign-in/" } = {}) => {
   if (typeof window === "undefined") {
     return;

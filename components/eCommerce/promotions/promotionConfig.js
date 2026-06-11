@@ -33,6 +33,40 @@ export const PROMOTION_CATEGORY_ENUM_TO_VALUE = {
   7: "TotalAmountBased",
 };
 
+/** Reverse of PROMOTION_CATEGORY_ENUM_TO_VALUE: string key → backend enum int. */
+export const PROMOTION_CATEGORY_VALUE_TO_ENUM = Object.entries(
+  PROMOTION_CATEGORY_ENUM_TO_VALUE,
+).reduce((acc, [num, key]) => {
+  acc[key] = Number(num);
+  return acc;
+}, {});
+
+/**
+ * Convert a UI category (string key like "ProductBased" or already-numeric value)
+ * to the numeric enum value the backend's JSON deserializer expects.
+ * The backend does NOT register JsonStringEnumConverter, so strings cause a 400.
+ */
+export function toPromotionCategoryEnum(category) {
+  if (category == null || category === "") return null;
+  if (typeof category === "number" && Number.isFinite(category)) return category;
+  const n = Number(category);
+  if (Number.isFinite(n) && PROMOTION_CATEGORY_ENUM_TO_VALUE[n]) return n;
+  return PROMOTION_CATEGORY_VALUE_TO_ENUM[String(category)] ?? null;
+}
+
+/** Convert UI discount type ("Value" | "Percentage") to backend DiscountType enum int. */
+export function toDiscountTypeEnum(discountType) {
+  if (discountType === 1 || discountType === 2) return discountType;
+  if (typeof discountType === "string") {
+    const s = discountType.toLowerCase();
+    if (s === "value") return 1;
+    if (s === "percentage") return 2;
+  }
+  const n = Number(discountType);
+  if (n === 1 || n === 2) return n;
+  return 2;
+}
+
 export function normalizePromotionCategoryKey(category) {
   if (category == null || category === "") return "";
   if (typeof category === "number") return PROMOTION_CATEGORY_ENUM_TO_VALUE[category] ?? "";
@@ -47,14 +81,14 @@ export function humanizePromotionCategoryEnumKey(key) {
   return String(key).replace(/([a-z])([A-Z])/g, "$1 $2");
 }
 
-/** API body: ECommerce.PromotionCategory rows (DiscountType enum as string) */
+/** API body: ECommerce.PromotionCategory rows (DiscountType enum as numeric int). */
 export function buildPromotionCategoryLinesPayload(rows) {
   return rows.map((row) => {
     const isValue = row.discountType === "Value";
     const num = Number(isValue ? row.value : row.percentage);
     return {
       categoryId: Number(row.categoryId),
-      discountType: isValue ? "Value" : "Percentage",
+      discountType: toDiscountTypeEnum(row.discountType),
       value: Number.isFinite(num) ? num : 0,
     };
   });
@@ -96,7 +130,7 @@ export function buildPromotionProductItemLinesPayload(rows) {
     const num = Number(isValue ? row.value : row.percentage);
     return {
       itemId: Number(row.itemId),
-      discountType: isValue ? "Value" : "Percentage",
+      discountType: toDiscountTypeEnum(row.discountType),
       value: Number.isFinite(num) ? num : 0,
     };
   });
@@ -128,7 +162,7 @@ export function buildPromotionTotalAmountLinesPayload(rows) {
     const num = Number(isValue ? row.value : row.percentage);
     return {
       billValue: Number(row.billValue),
-      discountType: isValue ? "Value" : "Percentage",
+      discountType: toDiscountTypeEnum(row.discountType),
       value: Number.isFinite(num) ? num : 0,
     };
   });

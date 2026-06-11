@@ -43,6 +43,9 @@ import MoreHorizIcon from "@mui/icons-material/MoreHoriz";
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
 import PersonOutlineIcon from "@mui/icons-material/PersonOutline";
 import ScheduleIcon from "@mui/icons-material/Schedule";
+import CancelIcon from "@mui/icons-material/Cancel";
+import BlockIcon from "@mui/icons-material/Block";
+import PaymentsIcon from "@mui/icons-material/Payments";
 import { ToastContainer, toast } from "react-toastify";
 import { Search, StyledInputBase } from "@/styles/main/search-styles";
 import usePaginatedFetch from "@/components/hooks/usePaginatedFetch";
@@ -59,6 +62,7 @@ const STATUS_TABS = [
   { value: "3", label: "Dispatched" },
   { value: "4", label: "Delivered" },
   { value: "5", label: "Completed" },
+  { value: "6", label: "Cancelled" },
   { value: "all", label: "All" },
 ];
 
@@ -77,6 +81,7 @@ const ORDER_STATUS_NAME_TO_NUM = {
   dispatched: 3,
   delivered: 4,
   completed: 5,
+  cancelled: 6,
 };
 
 const PAYMENT_NAME_TO_NUM = {
@@ -84,6 +89,34 @@ const PAYMENT_NAME_TO_NUM = {
   card: 2,
   banktransfer: 3,
 };
+
+const REFUND_STATUS_NAME_TO_NUM = {
+  notapplicable: 0,
+  pending: 1,
+  processing: 2,
+  completed: 3,
+  failed: 4,
+};
+
+const REFUND_STATUS_META = {
+  0: { label: "Not applicable", color: "default" },
+  1: { label: "Refund pending", color: "warning" },
+  2: { label: "Refund processing", color: "info" },
+  3: { label: "Refund completed", color: "success" },
+  4: { label: "Refund failed", color: "error" },
+};
+
+function parseRefundStatus(raw) {
+  if (raw == null || raw === "") return 0;
+  if (typeof raw === "number" && Number.isFinite(raw)) return raw;
+  if (typeof raw === "string") {
+    const n = Number(raw);
+    if (Number.isFinite(n)) return n;
+    const key = normalizeEnumKey(raw);
+    if (REFUND_STATUS_NAME_TO_NUM[key] != null) return REFUND_STATUS_NAME_TO_NUM[key];
+  }
+  return 0;
+}
 
 function normalizeEnumKey(raw) {
   if (raw == null) return "";
@@ -95,11 +128,11 @@ function normalizeEnumKey(raw) {
 function parseOrderStatus(raw) {
   if (raw == null || raw === "") return NaN;
   if (typeof raw === "number" && Number.isFinite(raw)) {
-    return raw >= 1 && raw <= 5 ? raw : NaN;
+    return raw >= 1 && raw <= 6 ? raw : NaN;
   }
   if (typeof raw === "string") {
     const n = Number(raw);
-    if (Number.isFinite(n) && n >= 1 && n <= 5) return n;
+    if (Number.isFinite(n) && n >= 1 && n <= 6) return n;
     const key = normalizeEnumKey(raw);
     if (ORDER_STATUS_NAME_TO_NUM[key] != null) return ORDER_STATUS_NAME_TO_NUM[key];
   }
@@ -147,6 +180,7 @@ function formatStatusHistoryAction(action) {
   if (a === "Created") return "Order placed";
   if (a === "Advance") return "Status advanced";
   if (a === "Revert") return "Status reverted";
+  if (a === "Cancel") return "Order cancelled";
   if (a === "CustomerConfirm") return "Customer confirmed completion";
   return a || "Update";
 }
@@ -184,6 +218,14 @@ function getStatusHistoryVisuals(action) {
       description: "The buyer marked this order as completed.",
       palette: "success",
       Icon: HowToRegIcon,
+    };
+  }
+  if (a === "Cancel") {
+    return {
+      title: "Order cancelled",
+      description: "Fulfillment was stopped and the customer was notified.",
+      palette: "error",
+      Icon: CancelIcon,
     };
   }
   return {
@@ -238,6 +280,10 @@ export default function Orders() {
   const [revertDialogOpen, setRevertDialogOpen] = useState(false);
   const [revertTargetOrderId, setRevertTargetOrderId] = useState(null);
   const [revertReason, setRevertReason] = useState("");
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+  const [cancelTargetOrder, setCancelTargetOrder] = useState(null);
+  const [cancelReason, setCancelReason] = useState("");
+  const [cancellingOrderId, setCancellingOrderId] = useState(null);
 
   const STATUS_META = useMemo(
     () => ({
@@ -246,6 +292,7 @@ export default function Orders() {
       3: { label: "Dispatched", color: "warning" },
       4: { label: "Delivered", color: "secondary" },
       5: { label: "Completed", color: "success" },
+      6: { label: "Cancelled", color: "error" },
     }),
     []
   );
@@ -290,6 +337,8 @@ export default function Orders() {
         lines: order.lines ?? order.Lines ?? [],
         customerFeedback: order.customerFeedback ?? order.CustomerFeedback ?? "",
         customerFeedbackOn: order.customerFeedbackOn ?? order.CustomerFeedbackOn ?? null,
+        cancellation: order.cancellation ?? order.Cancellation ?? null,
+        paymentOption: paymentOpt,
       };
     });
   }, [ordersList, STATUS_META, PAYMENT_MAPPER]);
@@ -403,6 +452,66 @@ export default function Orders() {
     setRevertDialogOpen(false);
     setRevertTargetOrderId(null);
     setRevertReason("");
+  };
+
+  const handleOpenCancelDialog = (order) => {
+    setCancelTargetOrder(order);
+    setCancelReason("");
+    setCancelDialogOpen(true);
+  };
+
+  const handleCloseCancelDialog = () => {
+    if (cancellingOrderId != null) return;
+    setCancelDialogOpen(false);
+    setCancelTargetOrder(null);
+    setCancelReason("");
+  };
+
+  const handleConfirmCancel = async () => {
+    const order = cancelTargetOrder;
+    const orderId = order?.orderId ?? order?.OrderId;
+    const reason = cancelReason.trim();
+    if (!orderId) return;
+    if (!reason) {
+      toast.error("Please provide a reason before cancelling this order.");
+      return;
+    }
+    try {
+      setCancellingOrderId(orderId);
+      const response = await fetch(`${BASE_URL}/ECommerce/CancelOnlineOrder`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          OrderId: orderId,
+          Reason: reason,
+        }),
+      });
+      const result = await readOrderStatusApiResult(response);
+      const refundStatus = parseRefundStatus(
+        result?.result?.refundStatus ?? result?.Result?.RefundStatus
+      );
+      if (refundStatus === 1) {
+        toast.success(
+          "Order cancelled. Remember to refund the customer manually on the WebXPay dashboard."
+        );
+      } else {
+        toast.success("Order cancelled and the customer has been notified.");
+      }
+      setCancelDialogOpen(false);
+      setCancelTargetOrder(null);
+      setCancelReason("");
+      fetchOrders(page, search, pageSize, undefined, undefined, extraQueryForStatusTab(statusTab));
+      if (selectedOrder?.orderId === orderId || selectedOrder?.OrderId === orderId) {
+        setHistoryRefreshKey((k) => k + 1);
+      }
+    } catch (error) {
+      toast.error(error.message || "Unable to cancel this order.");
+    } finally {
+      setCancellingOrderId(null);
+    }
   };
 
   const handleConfirmRevert = async () => {
@@ -597,31 +706,71 @@ export default function Orders() {
                       </TableCell>
                       <TableCell align="right">
                         <Box sx={{ display: "flex", justifyContent: "flex-end", gap: 1, flexWrap: "wrap" }}>
-                          {parseOrderStatus(item.orderStatus) > 1 && (
-                            <Button
-                              variant="outlined"
-                              color="warning"
-                              size="small"
-                              onClick={() => handleOpenRevertDialog(item.orderId)}
-                              disabled={
-                                revertingOrderId === item.orderId || updatingOrderId === item.orderId
-                              }
-                            >
-                              {revertingOrderId === item.orderId ? "Reverting…" : "Revert status"}
-                            </Button>
-                          )}
-                          {parseOrderStatus(item.orderStatus) !== 5 && (
-                            <Button
-                              variant="contained"
-                              size="small"
-                              onClick={() => handleUpdateStatus(item.orderId)}
-                              disabled={
-                                updatingOrderId === item.orderId || revertingOrderId === item.orderId
-                              }
-                            >
-                              {updatingOrderId === item.orderId ? "Updating…" : "Update status"}
-                            </Button>
-                          )}
+                          {(() => {
+                            const statusNum = parseOrderStatus(item.orderStatus);
+                            const isCancelled = statusNum === 6;
+                            if (isCancelled) {
+                              return (
+                                <Chip
+                                  size="small"
+                                  color="error"
+                                  variant="outlined"
+                                  icon={<BlockIcon sx={{ fontSize: 16 }} />}
+                                  label="Cancelled"
+                                  sx={{ fontWeight: 700 }}
+                                />
+                              );
+                            }
+                            return (
+                              <>
+                                {statusNum === 1 && (
+                                  <Button
+                                    variant="outlined"
+                                    color="error"
+                                    size="small"
+                                    startIcon={<CancelIcon />}
+                                    onClick={() => handleOpenCancelDialog(item)}
+                                    disabled={
+                                      cancellingOrderId === item.orderId ||
+                                      updatingOrderId === item.orderId ||
+                                      revertingOrderId === item.orderId
+                                    }
+                                  >
+                                    {cancellingOrderId === item.orderId ? "Cancelling…" : "Cancel order"}
+                                  </Button>
+                                )}
+                                {statusNum > 1 && (
+                                  <Button
+                                    variant="outlined"
+                                    color="warning"
+                                    size="small"
+                                    onClick={() => handleOpenRevertDialog(item.orderId)}
+                                    disabled={
+                                      revertingOrderId === item.orderId ||
+                                      updatingOrderId === item.orderId ||
+                                      cancellingOrderId === item.orderId
+                                    }
+                                  >
+                                    {revertingOrderId === item.orderId ? "Reverting…" : "Revert status"}
+                                  </Button>
+                                )}
+                                {statusNum !== 5 && (
+                                  <Button
+                                    variant="contained"
+                                    size="small"
+                                    onClick={() => handleUpdateStatus(item.orderId)}
+                                    disabled={
+                                      updatingOrderId === item.orderId ||
+                                      revertingOrderId === item.orderId ||
+                                      cancellingOrderId === item.orderId
+                                    }
+                                  >
+                                    {updatingOrderId === item.orderId ? "Updating…" : "Update status"}
+                                  </Button>
+                                )}
+                              </>
+                            );
+                          })()}
                         </Box>
                       </TableCell>
                     </TableRow>
@@ -724,30 +873,59 @@ export default function Orders() {
                   <Typography variant="overline" color="primary" fontWeight={700} letterSpacing={0.6}>
                     Fulfillment progress
                   </Typography>
-                  <Box sx={{ overflowX: "auto", py: 1.5, mx: -0.5 }}>
-                    <Stepper
-                      activeStep={Math.min(
-                        4,
-                        Math.max(0, (() => {
-                          const s = parseOrderStatus(
-                            selectedOrder.orderStatus ?? selectedOrder.OrderStatus
-                          );
-                          return (Number.isFinite(s) ? s : 1) - 1;
-                        })())
-                      )}
-                      alternativeLabel
-                      sx={{
-                        minWidth: { xs: 520, sm: "100%" },
-                        "& .MuiStepLabel-label": { fontSize: "0.7rem", fontWeight: 600 },
-                      }}
-                    >
-                      {ORDER_FLOW_STEPS.map((label) => (
-                        <Step key={label}>
-                          <StepLabel>{label}</StepLabel>
-                        </Step>
-                      ))}
-                    </Stepper>
-                  </Box>
+                  {(() => {
+                    const sNum = parseOrderStatus(
+                      selectedOrder.orderStatus ?? selectedOrder.OrderStatus
+                    );
+                    if (sNum === 6) {
+                      return (
+                        <Box
+                          sx={{
+                            mt: 1.5,
+                            p: 1.75,
+                            borderRadius: 2,
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 1.25,
+                            bgcolor: (t) => alpha(t.palette.error.main, 0.08),
+                            border: "1px solid",
+                            borderColor: (t) => alpha(t.palette.error.main, 0.3),
+                          }}
+                        >
+                          <BlockIcon color="error" />
+                          <Box>
+                            <Typography variant="subtitle2" fontWeight={800} color="error.dark">
+                              This order has been cancelled
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              See cancellation details below for the recorded reason and refund state.
+                            </Typography>
+                          </Box>
+                        </Box>
+                      );
+                    }
+                    return (
+                      <Box sx={{ overflowX: "auto", py: 1.5, mx: -0.5 }}>
+                        <Stepper
+                          activeStep={Math.min(
+                            4,
+                            Math.max(0, (Number.isFinite(sNum) ? sNum : 1) - 1)
+                          )}
+                          alternativeLabel
+                          sx={{
+                            minWidth: { xs: 520, sm: "100%" },
+                            "& .MuiStepLabel-label": { fontSize: "0.7rem", fontWeight: 600 },
+                          }}
+                        >
+                          {ORDER_FLOW_STEPS.map((label) => (
+                            <Step key={label}>
+                              <StepLabel>{label}</StepLabel>
+                            </Step>
+                          ))}
+                        </Stepper>
+                      </Box>
+                    );
+                  })()}
 
                   <Typography variant="overline" color="text.secondary" fontWeight={700} sx={{ mt: 1, display: "block" }}>
                     Line items
@@ -1066,6 +1244,149 @@ export default function Orders() {
                 </Paper>
               </Grid>
 
+              {(() => {
+                const cancel = selectedOrder.cancellation ?? selectedOrder.Cancellation;
+                if (!cancel) return null;
+                const refundStatusNum = parseRefundStatus(
+                  cancel.refundStatus ?? cancel.RefundStatus
+                );
+                const refundMeta =
+                  REFUND_STATUS_META[refundStatusNum] ?? REFUND_STATUS_META[0];
+                const cancelledOnRaw = cancel.cancelledOn ?? cancel.CancelledOn;
+                const cancelledOn = cancelledOnRaw ? new Date(cancelledOnRaw) : null;
+                const refundProcessedRaw = cancel.refundProcessedOn ?? cancel.RefundProcessedOn;
+                const refundProcessedOn = refundProcessedRaw ? new Date(refundProcessedRaw) : null;
+                const refundAmount = cancel.refundAmount ?? cancel.RefundAmount;
+                const refundReference = cancel.refundReference ?? cancel.RefundReference;
+                const refundNote = cancel.refundNote ?? cancel.RefundNote;
+                return (
+                  <Grid item xs={12}>
+                    <Paper
+                      elevation={0}
+                      sx={{
+                        p: 2,
+                        borderRadius: 2,
+                        border: "1px solid",
+                        borderColor: (t) => alpha(t.palette.error.main, 0.3),
+                        bgcolor: (t) => alpha(t.palette.error.main, 0.04),
+                      }}
+                    >
+                      <Box
+                        sx={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 1,
+                          mb: 1.5,
+                          flexWrap: "wrap",
+                        }}
+                      >
+                        <CancelIcon color="error" />
+                        <Typography
+                          variant="overline"
+                          color="error.dark"
+                          fontWeight={800}
+                          letterSpacing={0.6}
+                        >
+                          Cancellation details
+                        </Typography>
+                        <Chip
+                          size="small"
+                          color={refundMeta.color === "default" ? "default" : refundMeta.color}
+                          variant={refundMeta.color === "default" ? "outlined" : "filled"}
+                          icon={<PaymentsIcon sx={{ fontSize: 16 }} />}
+                          label={refundMeta.label}
+                          sx={{ fontWeight: 700 }}
+                        />
+                      </Box>
+                      <Grid container spacing={2}>
+                        <Grid item xs={12} sm={6}>
+                          <Typography variant="caption" color="text.secondary" fontWeight={600}>
+                            Cancelled by
+                          </Typography>
+                          <Typography variant="body2" fontWeight={600}>
+                            {cancel.cancelledBy ?? cancel.CancelledBy ?? "—"}
+                          </Typography>
+                        </Grid>
+                        <Grid item xs={12} sm={6}>
+                          <Typography variant="caption" color="text.secondary" fontWeight={600}>
+                            Cancelled on
+                          </Typography>
+                          <Typography variant="body2" fontWeight={600}>
+                            {cancelledOn
+                              ? formatDate(cancelledOn, {
+                                  year: "numeric",
+                                  month: "short",
+                                  day: "2-digit",
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })
+                              : "—"}
+                          </Typography>
+                        </Grid>
+                        <Grid item xs={12}>
+                          <Typography variant="caption" color="text.secondary" fontWeight={600}>
+                            Reason
+                          </Typography>
+                          <Typography variant="body2" sx={{ whiteSpace: "pre-wrap" }}>
+                            {(cancel.reason ?? cancel.Reason ?? "—").trim() || "—"}
+                          </Typography>
+                        </Grid>
+                        {(refundStatusNum !== 0 || refundAmount != null) && (
+                          <>
+                            <Grid item xs={12} sm={6}>
+                              <Typography variant="caption" color="text.secondary" fontWeight={600}>
+                                Refund amount
+                              </Typography>
+                              <Typography variant="body2" fontWeight={700} color="error.dark">
+                                {refundAmount != null ? formatCurrency(refundAmount) : "—"}
+                              </Typography>
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                              <Typography variant="caption" color="text.secondary" fontWeight={600}>
+                                Refund processed on
+                              </Typography>
+                              <Typography variant="body2" fontWeight={600}>
+                                {refundProcessedOn
+                                  ? formatDate(refundProcessedOn, {
+                                      year: "numeric",
+                                      month: "short",
+                                      day: "2-digit",
+                                      hour: "2-digit",
+                                      minute: "2-digit",
+                                    })
+                                  : refundStatusNum === 1
+                                  ? "Pending — refund manually via WebXPay dashboard"
+                                  : "—"}
+                              </Typography>
+                            </Grid>
+                            {refundReference && (
+                              <Grid item xs={12} sm={6}>
+                                <Typography variant="caption" color="text.secondary" fontWeight={600}>
+                                  Gateway reference
+                                </Typography>
+                                <Typography variant="body2" sx={{ wordBreak: "break-all" }}>
+                                  {refundReference}
+                                </Typography>
+                              </Grid>
+                            )}
+                            {refundNote && (
+                              <Grid item xs={12}>
+                                <Typography variant="caption" color="text.secondary" fontWeight={600}>
+                                  Note
+                                </Typography>
+                                <Typography variant="body2" sx={{ whiteSpace: "pre-wrap" }}>
+                                  {refundNote}
+                                </Typography>
+                              </Grid>
+                            )}
+                          </>
+                        )}
+                      </Grid>
+                    </Paper>
+                  </Grid>
+                );
+              })()}
+
               <Grid item xs={12}>
                 <Paper
                   elevation={0}
@@ -1336,25 +1657,35 @@ export default function Orders() {
                                   {actor}
                                 </Typography>
                               </Box>
-                              {action === "Revert" && reasonText ? (
+                              {(action === "Revert" || action === "Cancel") && reasonText ? (
                                 <Box
                                   sx={{
                                     mt: 1.5,
                                     p: 1.5,
                                     borderRadius: 2,
-                                    bgcolor: alpha(theme.palette.warning.main, 0.1),
+                                    bgcolor: alpha(
+                                      action === "Cancel"
+                                        ? theme.palette.error.main
+                                        : theme.palette.warning.main,
+                                      0.1
+                                    ),
                                     border: "1px solid",
-                                    borderColor: alpha(theme.palette.warning.main, 0.28),
+                                    borderColor: alpha(
+                                      action === "Cancel"
+                                        ? theme.palette.error.main
+                                        : theme.palette.warning.main,
+                                      0.28
+                                    ),
                                   }}
                                 >
                                   <Typography
                                     variant="caption"
                                     fontWeight={800}
-                                    color="warning.dark"
+                                    color={action === "Cancel" ? "error.dark" : "warning.dark"}
                                     display="block"
                                     sx={{ mb: 0.5, letterSpacing: 0.3 }}
                                   >
-                                    Revert reason
+                                    {action === "Cancel" ? "Cancellation reason" : "Revert reason"}
                                   </Typography>
                                   <Typography variant="body2" color="text.primary" sx={{ whiteSpace: "pre-wrap" }}>
                                     {reasonText}
@@ -1417,6 +1748,89 @@ export default function Orders() {
             disabled={revertingOrderId != null || !revertReason.trim()}
           >
             {revertingOrderId != null ? "Reverting…" : "Revert status"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={cancelDialogOpen}
+        onClose={handleCloseCancelDialog}
+        maxWidth="sm"
+        fullWidth
+        disableEscapeKeyDown={cancellingOrderId != null}
+        PaperProps={{ sx: { borderRadius: 2 } }}
+      >
+        <DialogTitle
+          sx={{
+            fontWeight: 700,
+            display: "flex",
+            alignItems: "center",
+            gap: 1,
+            color: "error.dark",
+          }}
+        >
+          <CancelIcon color="error" />
+          Cancel order {cancelTargetOrder?.orderNo ? `#${cancelTargetOrder.orderNo}` : ""}
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+            This action will:
+          </Typography>
+          <Box component="ul" sx={{ pl: 3, m: 0, mb: 2, color: "text.secondary" }}>
+            <li>
+              <Typography variant="body2">
+                Mark the order as <strong>Cancelled</strong> for the customer.
+              </Typography>
+            </li>
+            <li>
+              <Typography variant="body2">
+                Email the customer with the reason you provide below.
+              </Typography>
+            </li>
+            {cancelTargetOrder?.paymentOption === 2 && (
+              <li>
+                <Typography variant="body2" color="error.dark">
+                  Flag this card-paid order (
+                  <strong>{formatCurrency(cancelTargetOrder?.netTotal ?? 0)}</strong>) as{" "}
+                  <strong>Refund pending</strong>. You&apos;ll need to issue the refund manually
+                  from the WebXPay merchant dashboard.
+                </Typography>
+              </li>
+            )}
+            {cancelTargetOrder?.paymentOption !== 2 && (
+              <li>
+                <Typography variant="body2">
+                  No refund is needed because the order was not paid online.
+                </Typography>
+              </li>
+            )}
+          </Box>
+          <TextField
+            autoFocus
+            required
+            fullWidth
+            multiline
+            minRows={3}
+            label="Reason for cancellation"
+            placeholder="e.g. Out of stock, customer requested cancellation, payment failure…"
+            value={cancelReason}
+            onChange={(e) => setCancelReason(e.target.value)}
+            inputProps={{ maxLength: 500 }}
+            helperText={`${cancelReason.length}/500 — required, will be shown to the customer.`}
+          />
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={handleCloseCancelDialog} disabled={cancellingOrderId != null}>
+            Keep order
+          </Button>
+          <Button
+            variant="contained"
+            color="error"
+            startIcon={<CancelIcon />}
+            onClick={handleConfirmCancel}
+            disabled={cancellingOrderId != null || !cancelReason.trim()}
+          >
+            {cancellingOrderId != null ? "Cancelling…" : "Cancel order"}
           </Button>
         </DialogActions>
       </Dialog>

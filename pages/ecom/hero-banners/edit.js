@@ -96,7 +96,11 @@ export default function EditHeroBanner({ item, fetchItems }) {
     formData.append("Description", values.Description);
     formData.append("DisplayOrder", values.DisplayOrder);
     formData.append("IsActive", values.IsActive);
-    formData.append("ImageIdsToRemove", removedImageIds.join(","));
+    const imageIdsCsv = removedImageIds.join(",");
+    formData.append(
+      "ImageIdsToRemove",
+      imageIdsCsv.length > 0 ? imageIdsCsv : "0"
+    );
 
     newFiles.forEach((file) => {
       formData.append("BannerImages", file);

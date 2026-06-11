@@ -31,7 +31,7 @@ import { getPaymentMethods } from "@/components/types/types";
 
 export default function Invoice() {
   const cId = sessionStorage.getItem("category")
-  const { navigate, create, update, remove, print } = IsPermissionEnabled(cId);
+  const { navigate, create, update, remove, print, customPrint } = IsPermissionEnabled(cId);
   const router = useRouter();
   const name = localStorage.getItem("name");
   const { data: InvoiceReportName } = GetReportSettingValueByName("Invoice");
@@ -192,7 +192,7 @@ export default function Invoice() {
                         <TableCell align="right">
                           <Box display="flex" justifyContent="end" gap={1}>
                             <ShareReports url={whatsapp} mobile={item.customerContactNo} />
-                            {print ? <>
+                            {print ? (
                               <Tooltip title="Print" placement="top">
                                 <a href={`${Report}` + invoiceReportLink} target="_blank">
                                   <IconButton aria-label="print" size="small">
@@ -200,13 +200,16 @@ export default function Invoice() {
                                   </IconButton>
                                 </a>
                               </Tooltip>
-                              <Tooltip title="Print" placement="top">
+                            ) : ""}
+                            {customPrint ? (
+                              <Tooltip title="Print (Custom)" placement="top">
                                 <a href={`${Report}` + POSInvoiceReportLink} target="_blank">
-                                  <IconButton aria-label="print" size="small">
+                                  <IconButton aria-label="print custom" size="small">
                                     <ReceiptIcon color="primary" fontSize="medium" />
                                   </IconButton>
                                 </a>
-                              </Tooltip></> : ""}
+                              </Tooltip>
+                            ) : ""}
                             {remove ? <CancelConfirmationById invId={item.id} fetchItems={fetchInvoiceList} /> : ""}
                           </Box>
                         </TableCell>

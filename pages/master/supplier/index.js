@@ -122,6 +122,11 @@ export default function Supplier() {
     return <AccessDenied />;
   }
 
+  const tableColumnCount =
+    7 +
+    (isPOSSystem ? 2 : 0) +
+    (isBankAccountRequiredToSupplier ? 1 : 0);
+
   return (
     <>
       <ToastContainer />
@@ -157,20 +162,25 @@ export default function Supplier() {
           justifyContent="end"
           order={{ xs: 1, lg: 2 }}
         >
-          {create ? <AddSupplier
-            fetchItems={fetchSupplierList}
-            isPOSSystem={isPOSSystem}
-            isBankRequired={isBankAccountRequiredToSupplier}
-            banks={banks}
-            chartOfAccounts={chartOfAccounts}
-          /> : ""}
+          {create ? (
+            <AddSupplier
+              fetchItems={() => fetchSupplierList()}
+              isPOSSystem={isPOSSystem}
+              isBankRequired={isBankAccountRequiredToSupplier}
+              banks={banks}
+              chartOfAccounts={chartOfAccounts}
+            />
+          ) : (
+            ""
+          )}
         </Grid>
         <Grid item xs={12} order={{ xs: 3, lg: 3 }}>
           <TableContainer component={Paper}>
             <Table aria-label="simple table" className="dark-table">
               <TableHead>
                 <TableRow>
-                  <TableCell>Supplier Name</TableCell>
+                  <TableCell>Name</TableCell>
+                  <TableCell>Display Name</TableCell>
                   <TableCell>Mobile No</TableCell>
                   {isPOSSystem && (
                     <>
@@ -192,7 +202,7 @@ export default function Supplier() {
                   <TableRow
                     sx={{ "&:last-child td, &:last-child th": { border: 0 } }}
                   >
-                    <TableCell colSpan={7} component="th" scope="row">
+                    <TableCell colSpan={tableColumnCount} component="th" scope="row">
                       <Typography color="error">
                         No Suppliers Available
                       </Typography>
@@ -205,7 +215,10 @@ export default function Supplier() {
                       sx={{ "&:last-child td, &:last-child th": { border: 0 } }}
                     >
                       <TableCell component="th" scope="row">
-                        {supplier.name}
+                        {supplier.firstName ?? supplier.FirstName ?? ""} {supplier.lastName ?? supplier.LastName ?? ""} 
+                      </TableCell>
+                      <TableCell component="th" scope="row">
+                        {supplier.name ?? supplier.Name ?? "-"}
                       </TableCell>
                       <TableCell component="th" scope="row">
                         {supplier.mobileNo}

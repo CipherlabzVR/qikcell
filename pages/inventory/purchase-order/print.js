@@ -185,25 +185,65 @@ export default function PurchaseOrderPrintPage() {
   }, [purchaseOrderData?.warehouseId]);
 
   const lineItems = purchaseOrderData?.goodReceivedNoteLineDetails ?? [];
+  /**
+   * Field semantics (open PO): see getQtyForLineAmount — line cost/discount qty matches
+   * Purchase Order Edit (Local: `qty`; Import: `receivedQty`). Order display still uses `getOrderQty`.
+   */
+  const poType = purchaseOrderData?.type ?? purchaseOrderData?.purchasingOrderType;
+  const isLocalPO = poType == 1;
+
+  const getOrderQty = (item) =>
+    Number(item.poQty ?? item.orderedQty ?? item.qty ?? 0);
+
+  const getReceivedQty = (item) => {
+    if (isLocalPO) {
+      return item.isAllReceived ? Number(item.qty ?? 0) : 0;
+    }
+    return Number(item.receivedQty ?? 0);
+  };
+
+  /** Qty for line cost & discount — matches Purchase Order Edit (Local: line qty; Import: received qty). */
+  const getQtyForLineAmount = (item) => {
+    if (isLocalPO) {
+      return Number(item.qty ?? 0);
+    }
+    return Number(item.receivedQty ?? 0);
+  };
+
+  /** Line amount before discount (shown in Total Cost column). */
+  const getLineGross = (item) =>
+    Number(item.costPrice ?? 0) * getQtyForLineAmount(item);
+
+  const getLineDiscount = (item) => {
+    const rate = Number(item.discountRate ?? 0);
+    const amount = Number(item.discountAmount ?? 0);
+    if (rate > 0) {
+      return (getLineGross(item) * rate) / 100;
+    }
+    return amount > 0 ? amount : 0;
+  };
+
+  /** Line amount after discount (Grand Total sums this). */
+  const getLineTotal = (item) => {
+    const fromDb =
+      item.lineTotal && Number(item.lineTotal) > 0 ? Number(item.lineTotal) : null;
+    if (fromDb != null && !Number.isNaN(fromDb)) {
+      return fromDb;
+    }
+    return Math.max(getLineGross(item) - getLineDiscount(item), 0);
+  };
+
   const totalQty = useMemo(
-    () =>
-      lineItems.reduce(
-        (sum, item) => sum + Number(item.poQty ?? item.qty ?? 0),
-        0
-      ),
+    () => lineItems.reduce((sum, item) => sum + getOrderQty(item), 0),
     [lineItems]
   );
+  const totalDiscount = useMemo(
+    () => lineItems.reduce((sum, item) => sum + getLineDiscount(item), 0),
+    [lineItems, isLocalPO]
+  );
   const totalCost = useMemo(
-    () =>
-      lineItems.reduce((sum, item) => {
-        const orderedQty = Number(item.poQty ?? item.qty ?? 0);
-        const lineTotal =
-          item.lineTotal && Number(item.lineTotal) > 0
-            ? Number(item.lineTotal)
-            : orderedQty * Number(item.costPrice ?? 0);
-        return sum + (Number.isNaN(lineTotal) ? 0 : lineTotal);
-      }, 0),
-    [lineItems]
+    () => lineItems.reduce((sum, item) => sum + getLineTotal(item), 0),
+    [lineItems, isLocalPO]
   );
 
   const companyAddressLines = useMemo(
@@ -334,6 +374,26 @@ export default function PurchaseOrderPrintPage() {
 
   const currentDate = format(new Date(), "dd-MMM-yyyy");
 
+  const colFlex = {
+    product: 1.35,
+    batch: 0.85,
+    exp: 0.95,
+    orderQty: 0.68,
+    recvQty: 0.75,
+    cost: 0.8,
+    selling: 0.8,
+    discountPct: 0.65,
+    discountAmt: 0.85,
+    total: 1.0,
+  };
+
+  const headerSx = {
+    fontSize: { xs: "0.5rem", sm: "0.78rem" },
+  };
+  const cellSx = {
+    fontSize: { xs: "0.5rem", sm: "0.76rem" },
+  };
+
   const renderTable = (items, isLastPage) => (
     <Box sx={{ mb: { xs: 2, sm: 3 }, borderTop: "2px solid #333", borderBottom: "2px solid #333" }}>
       <Box
@@ -345,25 +405,22 @@ export default function PurchaseOrderPrintPage() {
           color: "black",
         }}
       >
-        <Box sx={{ flex: 1.5, fontSize: { xs: "0.52rem", sm: "0.82rem" } }}>
-          Product
-        </Box>
-        <Box sx={{ flex: 1.2, fontSize: { xs: "0.52rem", sm: "0.82rem" } }}>
-          Batch
-        </Box>
-        <Box sx={{ flex: 1, textAlign: "right", fontSize: { xs: "0.52rem", sm: "0.82rem" } }}>
+        <Box sx={{ flex: colFlex.product, ...headerSx }}>Product</Box>
+        <Box sx={{ flex: colFlex.batch, ...headerSx }}>Batch</Box>
+        <Box sx={{ flex: colFlex.exp, ...headerSx }}>Exp Date</Box>
+        <Box sx={{ flex: colFlex.orderQty, textAlign: "right", ...headerSx }}>
           Order Qty
-        </Box>
-        <Box sx={{ flex: 1, textAlign: "right", fontSize: { xs: "0.52rem", sm: "0.82rem" } }}>
-          Received Qty
         </Box>
         <Box sx={{ flex: 1, textAlign: "right", fontSize: { xs: "0.52rem", sm: "0.82rem" } }}>
           Cost Price
         </Box>
-        <Box sx={{ flex: 1, textAlign: "right", fontSize: { xs: "0.52rem", sm: "0.82rem" } }}>
-          Selling Price
+        <Box sx={{ flex: colFlex.discountPct, textAlign: "right", ...headerSx }}>
+          Dis%
         </Box>
-        <Box sx={{ flex: 1.1, textAlign: "right", fontSize: { xs: "0.52rem", sm: "0.82rem" } }}>
+        <Box sx={{ flex: colFlex.discountAmt, textAlign: "right", ...headerSx }}>
+          Dis Amt
+        </Box>
+        <Box sx={{ flex: colFlex.total, textAlign: "right", ...headerSx }}>
           Total Cost
         </Box>
       </Box>
@@ -375,55 +432,110 @@ export default function PurchaseOrderPrintPage() {
           </Typography>
         </Box>
       ) : (
-        items.map((item, index) => (
-          <Box
-            key={item.id || `${item.productCode}-${index}`}
-            sx={{
-              display: "flex",
-              padding: { xs: "5px 4px", sm: "8px 6px" },
-              borderBottom: index === items.length - 1 ? "none" : "1px solid #cfcfcf",
-            }}
-          >
-            <Box sx={{ flex: 1.5, fontSize: { xs: "0.52rem", sm: "0.8rem" } }}>
-              {item.productCode || "-"}
-            </Box>
-            <Box sx={{ flex: 1.2, fontSize: { xs: "0.52rem", sm: "0.8rem" } }}>
-              {item.batch || "-"}
-            </Box>
-            <Box sx={{ flex: 1, textAlign: "right", fontSize: { xs: "0.52rem", sm: "0.8rem" } }}>
-              {formatQty(item.poQty ?? item.qty)}
-            </Box>
-            <Box sx={{ flex: 1, textAlign: "right", fontSize: { xs: "0.52rem", sm: "0.8rem" } }}>
-              {formatQty(item.receivedQty ?? item.orderedQty ?? item.poQty ?? 0)}
-            </Box>
-            <Box sx={{ flex: 1, textAlign: "right", fontSize: { xs: "0.52rem", sm: "0.8rem" } }}>
-              {formatAmount(item.costPrice)}
-            </Box>
-            <Box sx={{ flex: 1, textAlign: "right", fontSize: { xs: "0.52rem", sm: "0.8rem" } }}>
-              {formatAmount(item.sellingPrice)}
-            </Box>
-            <Box sx={{ flex: 1.1, textAlign: "right", fontSize: { xs: "0.52rem", sm: "0.8rem" }, fontWeight: 600 }}>
-              {formatAmount(
-                item.lineTotal && Number(item.lineTotal) > 0
-                  ? item.lineTotal
-                  : Number(item.costPrice ?? 0) * Number(item.poQty ?? item.qty ?? 0)
+        items.map((item, index) => {
+          const free = Number(item.free ?? 0);
+          const status = item.status && item.status !== "Approval" ? item.status : "";
+          const hasSubLine = free > 0 || status;
+
+          return (
+            <Box
+              key={item.id || `${item.productCode}-${index}`}
+              sx={{
+                padding: { xs: "5px 4px", sm: "6px 6px" },
+                borderBottom: index === items.length - 1 ? "none" : "1px solid #cfcfcf",
+              }}
+            >
+              <Box sx={{ display: "flex" }}>
+                <Box sx={{ flex: colFlex.product, ...cellSx }}>
+                  {item.productName || item.productCode || "-"}
+                </Box>
+                <Box sx={{ flex: colFlex.batch, ...cellSx }}>{item.batch || "-"}</Box>
+                <Box sx={{ flex: colFlex.exp, ...cellSx }}>
+                  {item.expDate ? formatDisplayDate(item.expDate) : "-"}
+                </Box>
+                <Box sx={{ flex: colFlex.orderQty, textAlign: "right", ...cellSx }}>
+                  {formatQty(getOrderQty(item))}
+                </Box>
+                <Box sx={{ flex: colFlex.cost, textAlign: "right", ...cellSx }}>
+                  {formatAmount(item.costPrice)}
+                </Box>
+                <Box sx={{ flex: colFlex.discountPct, textAlign: "right", ...cellSx }}>
+                  {formatAmount(Number(item.discountRate ?? 0))}
+                </Box>
+                <Box sx={{ flex: colFlex.discountAmt, textAlign: "right", ...cellSx }}>
+                  {formatAmount(getLineDiscount(item))}
+                </Box>
+                <Box
+                  sx={{
+                    flex: colFlex.total,
+                    textAlign: "right",
+                    ...cellSx,
+                    fontWeight: 600,
+                  }}
+                >
+                  {formatAmount(getLineGross(item))}
+                </Box>
+              </Box>
+
+              {hasSubLine && (
+                <Box
+                  sx={{
+                    display: "flex",
+                    flexWrap: "wrap",
+                    gap: { xs: 1, sm: 2 },
+                    mt: 0.4,
+                    pl: 0.5,
+                    color: "#555",
+                    fontSize: { xs: "0.46rem", sm: "0.68rem" },
+                    fontStyle: "italic",
+                  }}
+                >
+                  {free > 0 && <span>Free: {formatQty(free)}</span>}
+                  {status && <span>Status: {status}</span>}
+                </Box>
               )}
             </Box>
-          </Box>
-        ))
+          );
+        })
       )}
 
       {isLastPage && items.length > 0 && (
         <Box
           sx={{
             display: "flex",
-            justifyContent: "flex-end",
+            flexDirection: "column",
+            alignItems: "flex-end",
             padding: { xs: "6px 4px", sm: "8px 6px" },
             borderTop: "1px solid #333",
+            gap: 0.4,
           }}
         >
-          <Box sx={{ flex: 1.1, textAlign: "right", fontWeight: 700, fontSize: { xs: "0.56rem", sm: "0.86rem" } }}>
-            {formatAmount(totalCost)}
+          {totalDiscount > 0 && (
+            <Box
+              sx={{
+                display: "flex",
+                gap: 1,
+                fontSize: { xs: "0.54rem", sm: "0.8rem" },
+              }}
+            >
+              <Box sx={{ fontWeight: 600 }}>Total Discount:</Box>
+              <Box sx={{ minWidth: "80px", textAlign: "right" }}>
+                {formatAmount(totalDiscount)}
+              </Box>
+            </Box>
+          )}
+          <Box
+            sx={{
+              display: "flex",
+              gap: 1,
+              fontSize: { xs: "0.56rem", sm: "0.86rem" },
+              fontWeight: 700,
+            }}
+          >
+            <Box>Grand Total:</Box>
+            <Box sx={{ minWidth: "80px", textAlign: "right" }}>
+              {formatAmount(totalCost)}
+            </Box>
           </Box>
         </Box>
       )}
@@ -518,6 +630,10 @@ export default function PurchaseOrderPrintPage() {
                 "Purchase Order Type",
                 purchaseOrderData?.purchasingOrderType === 2 ? "Import" : "Local",
               ],
+              [
+                "Payment",
+                purchaseOrderData?.isCredit ? "Credit" : "Cash",
+              ],
             ].map(([label, value]) => (
               <Box
                 key={label}
@@ -553,6 +669,12 @@ export default function PurchaseOrderPrintPage() {
                   "-",
               ],
               ["Reference No", purchaseOrderData?.referanceNo || "-"],
+              [
+                "GRN Date",
+                formatDisplayDate(
+                  purchaseOrderData?.grnDate ?? purchaseOrderData?.poDate
+                ),
+              ],
             ].map(([label, value]) => (
               <Box
                 key={label}
@@ -582,17 +704,30 @@ export default function PurchaseOrderPrintPage() {
       {renderTable(items, isLastPage)}
 
       {isLastPage && (
-        <>
-          <Typography sx={{ fontSize: { xs: "0.62rem", sm: "0.84rem" }, mb: 0.75 }}>
-            <strong>Remark:</strong> {purchaseOrderData?.remark || "-"}
-          </Typography>
-          <Typography sx={{ fontSize: { xs: "0.62rem", sm: "0.84rem" }, mb: 0.4 }}>
+        <Box
+          sx={{
+            display: "grid",
+            gridTemplateColumns: { xs: "1fr 1fr", sm: "repeat(4, 1fr)" },
+            columnGap: 2,
+            rowGap: 0.4,
+            fontSize: { xs: "0.62rem", sm: "0.84rem" },
+          }}
+        >
+          <Typography sx={{ fontSize: "inherit" }}>
             <strong>Total Products:</strong> {lineItems.length}
           </Typography>
-          <Typography sx={{ fontSize: { xs: "0.62rem", sm: "0.84rem" } }}>
+          <Typography sx={{ fontSize: "inherit" }}>
             <strong>Total Qty:</strong> {formatQty(totalQty)}
           </Typography>
-        </>
+          {totalDiscount > 0 && (
+            <Typography sx={{ fontSize: "inherit" }}>
+              <strong>Total Discount:</strong> {formatAmount(totalDiscount)}
+            </Typography>
+          )}
+          <Typography sx={{ fontSize: "inherit" }}>
+            <strong>Grand Total:</strong> {formatAmount(totalCost)}
+          </Typography>
+        </Box>
       )}
     </Box>
   );

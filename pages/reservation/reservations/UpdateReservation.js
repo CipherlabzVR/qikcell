@@ -1,15 +1,10 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import BorderColorIcon from "@mui/icons-material/BorderColor";
 import {
   AppBar,
   Checkbox,
-  FormControl,
-  FormControlLabel,
-  FormGroup,
   Grid,
   IconButton,
-  MenuItem,
-  Select,
   Tab,
   Table,
   TableBody,
@@ -26,15 +21,10 @@ import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Modal from "@mui/material/Modal";
 import TextField from "@mui/material/TextField";
-import { Field, Form, Formik } from "formik";
+import { Form, Formik } from "formik";
 import PropTypes from "prop-types";
 import { formatDate } from "@/components/utils/formatHelper";
-import {
-  getAppointment,
-  getBridal,
-  getLocation,
-  getPreferedTime,
-} from "@/components/types/types";
+import { getAppointment } from "@/components/types/types";
 import { toast } from "react-toastify";
 import BASE_URL from "Base/api";
 
@@ -43,16 +33,59 @@ const style = {
   top: "50%",
   left: "50%",
   transform: "translate(-50%, -50%)",
-  width: { lg: 900, xs: 400 },
+  width: { xs: "min(96vw, 520px)", sm: "min(92vw, 720px)", lg: "min(96vw, 980px)" },
+  maxHeight: "92vh",
   bgcolor: "background.paper",
   boxShadow: 24,
-  p: 4,
+  p: { xs: 2, sm: 3 },
+  borderRadius: 2,
+  display: "flex",
+  flexDirection: "column",
+  outline: "none",
 };
 
 const tabPanelStyle = {
-  maxHeight: "60vh",
+  flex: 1,
+  minHeight: 0,
+  maxHeight: { xs: "min(62vh, 520px)", sm: "min(65vh, 560px)", lg: "min(62vh, 580px)" },
   overflowY: "auto",
+  px: { xs: 0.5, sm: 0 },
 };
+
+const FUNCTION_TYPE_LABELS = {
+  1: "Wedding",
+  2: "Home Coming",
+  3: "Wedding & Home Coming",
+  4: "Normal Dressing",
+  5: "Photo Shoot",
+  6: "Outfit Only",
+  7: "Engagement",
+};
+const PREFERRED_TIME_LABELS = { 1: "Morning", 2: "Evening" };
+const BRIDAL_LABELS = {
+  1: "Kandyan",
+  2: "Indian",
+  3: "Western",
+  4: "Hindu",
+};
+const LOCATION_LABELS = { 1: "Studio", 2: "Away", 3: "Overseas" };
+
+function DetailLine({ label, children }) {
+  const empty =
+    children === undefined ||
+    children === null ||
+    (typeof children === "string" && children.trim() === "");
+  return (
+    <Grid item xs={12} sm={6}>
+      <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.25 }}>
+        {label}
+      </Typography>
+      <Typography variant="body2" sx={{ fontWeight: 500, wordBreak: "break-word" }}>
+        {empty ? "—" : children}
+      </Typography>
+    </Grid>
+  );
+}
 
 function TabPanel(props) {
   const { children, value, index, ...other } = props;
@@ -65,11 +98,7 @@ function TabPanel(props) {
       aria-labelledby={`full-width-tab-${index}`}
       {...other}
     >
-      {value === index && (
-        <Box sx={{ p: 3 }}>
-          <Typography>{children}</Typography>
-        </Box>
-      )}
+      {value === index && <Box sx={{ py: 1 }}>{children}</Box>}
     </div>
   );
 }
@@ -105,7 +134,8 @@ export default function UpdateReservation({ reservation, fetchItems, approve1 })
   const [initialPaymentDate, setInitialPaymentDate] = useState(
     reservation?.initialPaymentDate ? formatDate(reservation.initialPaymentDate) : ""
   );
-  const textFieldRef = useRef(null);
+
+
   const [value, setValue] = useState(0);
   const [dressingRows, setDressingRows] = useState(() => {
     const initialRows = [
@@ -397,20 +427,15 @@ export default function UpdateReservation({ reservation, fetchItems, approve1 })
   };
 
   useEffect(() => {
-    if (textFieldRef.current) {
-      setTextFieldWidth(textFieldRef.current.offsetWidth);
-    }
-    var isHomecoming = reservation.reservationFunctionType === 3 ? true : false;
+    const isHomecoming = reservation.reservationFunctionType === 3;
     setIsHomeComing(isHomecoming);
-    var bridal = reservation.homeComingBridleType ? reservation.homeComingBridleType : 1;
-    var location = reservation.homeComingLocation ? reservation.homeComingLocation : 1;
-    var pref = reservation.homeComingPreferredTime ? reservation.homeComingPreferredTime : 1;
-
+    const bridal = reservation.homeComingBridleType ? reservation.homeComingBridleType : 1;
+    const location = reservation.homeComingLocation ? reservation.homeComingLocation : 1;
+    const pref = reservation.homeComingPreferredTime ? reservation.homeComingPreferredTime : 1;
     setHomeComingBridalTypeValue(bridal);
     setHomeComingLocationValue(location);
     setHomeComingPreferedTimeValue(pref);
-
-  }, [textFieldRef.current,reservation]);
+  }, [reservation]);
 
   const handleClose = () => {
     setOpen(false);
@@ -430,6 +455,9 @@ export default function UpdateReservation({ reservation, fetchItems, approve1 })
         aria-describedby="modal-modal-description"
       >
         <Box sx={style} className="bg-black">
+          <Typography variant="h6" fontWeight={700} sx={{ mb: 2, flexShrink: 0 }}>
+            Edit reservation
+          </Typography>
           <Formik
             initialValues={{
               Id: reservation?.id || "",
@@ -510,19 +538,25 @@ export default function UpdateReservation({ reservation, fetchItems, approve1 })
               resetForm();
             }}
           >
-            {({ values, errors, touched, setFieldValue }) => (
+            {({ values }) => {
+              const canEditPayment = !!approve1;
+              return (
               <Form>
-                <Box>
+                <Box sx={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
                   <AppBar
-                    sx={{ background: "#e5e5e5", boxShadow: "none" }}
                     position="static"
+                    elevation={0}
+                    sx={{ bgcolor: "transparent", color: "text.primary" }}
                   >
                     <Tabs
                       value={value}
                       onChange={handleChange}
-                      indicatorColor="white"
-                      variant="fullWidth"
-                      aria-label="full width tabs example"
+                      indicatorColor="primary"
+                      variant="scrollable"
+                      scrollButtons="auto"
+                      allowScrollButtonsMobile
+                      sx={{ "& .MuiTab-root": { textTransform: "none", fontWeight: 600, minHeight: 44 } }}
+                      aria-label="Reservation tabs"
                     >
                       <Tab
                         label="General"
@@ -548,532 +582,152 @@ export default function UpdateReservation({ reservation, fetchItems, approve1 })
                   </AppBar>
                   <Box sx={tabPanelStyle}>
                     <TabPanel value={value} index={0} dir={theme.direction}>
-                      <Grid container spacing={1}>
-                        <Grid item xs={12} lg={6} mb={1}>
-                          <Typography>Payment Code</Typography>
+                      <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 2 }}>
+                        Customer details
+                      </Typography>
+                      <Grid container spacing={2} rowSpacing={1.75}>
+                        <Grid item xs={12} sm={6}>
+                          <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.5 }}>
+                            Payment code
+                          </Typography>
                           <TextField
+                            variant="standard"
                             value={paymentCode}
-                            disabled={!approve1}
+                            disabled={!canEditPayment}
                             onChange={(e) => setPaymentCode(e.target.value)}
                             fullWidth
+                            size="small"
                           />
+                          {!canEditPayment && (
+                            <Typography variant="caption" color="text.secondary">
+                              Edit permission required
+                            </Typography>
+                          )}
                         </Grid>
-                        <Grid item xs={12} lg={6} mb={1}>
-                          <Typography>Initial Payment Date</Typography>
+                        <Grid item xs={12} sm={6}>
+                          <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.5 }}>
+                            Initial payment date
+                          </Typography>
                           <TextField
+                            variant="standard"
                             type="date"
                             value={initialPaymentDate}
-                            disabled
+                            disabled={!canEditPayment}
+                            onChange={(e) => setInitialPaymentDate(e.target.value)}
                             fullWidth
+                            size="small"
+                            InputLabelProps={{ shrink: true }}
                           />
                         </Grid>
-                        <Grid item xs={12} lg={6} mb={1}>
-                          <Typography>Wedding Date</Typography>
-                          <Field
-                            as={TextField}
-                            type="date"
-                            name="ReservationDate"
-                            value={formatDate(values.ReservationDate)}
-                            fullWidth
-                          />
-                        </Grid>
-                        <Grid item xs={12} lg={6} mb={1}>
-                          <Typography>Event Type</Typography>
-                          <FormControl fullWidth>
-                            <Field
-                              as={Select}
-                              name="ReservationFunctionType"
-                              value={values.ReservationFunctionType}
-                            >
-                              <MenuItem value={1}>Wedding</MenuItem>
-                              <MenuItem value={2}>Home Coming</MenuItem>
-                              <MenuItem value={3}>Wedding & Home Coming</MenuItem>
-                              <MenuItem value={4}>Normal Dressing</MenuItem>
-                              <MenuItem value={5}>Photo Shoot</MenuItem>
-                              <MenuItem value={6}>Outfit Only</MenuItem>
-                              <MenuItem value={7}>Engagement</MenuItem>
-                            </Field>
-                          </FormControl>
-                        </Grid>
-                        <Grid item xs={12} lg={6} mb={1}>
-                          <Typography>Name of Bride</Typography>
-                          <Field
-                            as={TextField}
-                            value={values.CustomerName}
-                            fullWidth
-                            name="CustomerName"
-                          />
-                        </Grid>
-                        <Grid item xs={12} lg={6} mb={1}>
-                          <Typography>Name of Groom</Typography>
-                          <Field
-                            as={TextField}
-                            value={values.GroomName}
-                            fullWidth
-                            name="GroomName"
-                          />
-                        </Grid>
-                        <Grid item xs={12} lg={6} mb={1}>
-                          <Typography>NIC/Passport No</Typography>
-                          <Field
-                            as={TextField}
-                            value={values.NIC}
-                            fullWidth
-                            name="NIC"
-                          />
-                        </Grid>
-                        <Grid item xs={12} lg={6} mb={1}>
-                          <Typography>Contact No</Typography>
-                          <Field
-                            as={TextField}
-                            value={values.MobileNo}
-                            fullWidth
-                            name="MobileNo"
-                            type="number"
-                          />
-                        </Grid>
-                        <Grid item xs={12} lg={6} mb={1}>
-                          <Typography>Emergency Contact No</Typography>
-                          <Field
-                            as={TextField}
-                            value={values.EmergencyContactNo}
-                            fullWidth
-                            name="EmergencyContactNo"
-                            type="number"
-                          />
-                        </Grid>
-                        <Grid item xs={12} lg={6} mb={1}>
-                          <Typography>Wedding Venue</Typography>
-                          <Field
-                            as={TextField}
-                            value={values.ReservationDetails.WeddingVenue}
-                            fullWidth
-                            name="ReservationDetails.WeddingVenue"
-                          />
-                        </Grid>
-                        <Grid item xs={12} lg={6} mb={1}>
-                          <Typography>Dressing Venue</Typography>
-                          <Field
-                            as={TextField}
-                            value={values.ReservationDetails.DressingVenue}
-                            name="ReservationDetails.DressingVenue"
-                            fullWidth
-                          />
-                        </Grid>
-                        <Grid item xs={12} lg={6} mb={1}>
-                          <Typography>Prefered Time</Typography>
-                          <Field
-                            as={Select}
-                            name="PreferedTime"
-                            fullWidth
-                            value={values.PreferedTime}
-                          >
-                            <MenuItem value={1}>Morning</MenuItem>
-                            <MenuItem value={2}>Evening</MenuItem>
-                          </Field>
-                        </Grid>
-                        <Grid item xs={12} lg={6} mb={1}>
-                          <Typography>Bridal Type</Typography>
-                          <Field
-                            as={Select}
-                            name="BridalType"
-                            fullWidth
-                            value={values.BridalType}
-                          >
-                            <MenuItem value={1}>Kandyan</MenuItem>
-                            <MenuItem value={2}>Indian</MenuItem>
-                            <MenuItem value={3}>Western</MenuItem>
-                            <MenuItem value={4}>Hindu</MenuItem>
-                          </Field>
-                        </Grid>
-                        <Grid item xs={12} lg={6} mb={1}>
-                          <Typography>Location</Typography>
-                          <Field
-                            as={Select}
-                            name="Location"
-                            fullWidth
-                            value={values.Location}
-                          >
-                            <MenuItem value={1}>Studio</MenuItem>
-                            <MenuItem value={2}>Away</MenuItem>
-                            <MenuItem value={3}>Overseas</MenuItem>
-                          </Field>
-                        </Grid>
-                        <Grid item xs={12} mb={1}>
-                          <Typography>Address Line 1</Typography>
-                          <Field
-                            as={TextField}
-                            value={values.ReservationDetails.AddressLine1}
-                            name="ReservationDetails.AddressLine1"
-                            fullWidth
-                          />
-                        </Grid>
-                        <Grid item xs={12} lg={6} mb={1}>
-                          <Typography>Address Line 2</Typography>
-                          <Field
-                            as={TextField}
-                            value={values.ReservationDetails.AddressLine2}
-                            name="ReservationDetails.AddressLine2"
-                            fullWidth
-                          />
-                        </Grid>
-                        <Grid item xs={12} lg={6} mb={1}>
-                          <Typography>Address Line 3</Typography>
-                          <Field
-                            as={TextField}
-                            value={values.ReservationDetails.AddressLine3}
-                            name="ReservationDetails.AddressLine3"
-                            fullWidth
-                          />
-                        </Grid>
-                        <Grid item xs={12} mb={1}>
-                          <Typography variant="h6">
-                            Wedding Day Contact Details
+
+                        <DetailLine label="Wedding date">{formatDate(values.ReservationDate) || "—"}</DetailLine>
+                        <DetailLine label="Event type">
+                          {FUNCTION_TYPE_LABELS[values.ReservationFunctionType] ?? "—"}
+                        </DetailLine>
+                        <DetailLine label="Name of bride">{values.CustomerName}</DetailLine>
+                        <DetailLine label="Name of groom">{values.GroomName}</DetailLine>
+                        <DetailLine label="NIC / passport">{values.NIC}</DetailLine>
+                        <DetailLine label="Contact no.">{values.MobileNo}</DetailLine>
+                        <DetailLine label="Emergency contact">{values.EmergencyContactNo}</DetailLine>
+                        <DetailLine label="Wedding venue">{values.ReservationDetails.WeddingVenue}</DetailLine>
+                        <DetailLine label="Dressing venue">{values.ReservationDetails.DressingVenue}</DetailLine>
+                        <DetailLine label="Preferred time">
+                          {PREFERRED_TIME_LABELS[values.PreferedTime] ?? "—"}
+                        </DetailLine>
+                        <DetailLine label="Bridal type">
+                          {BRIDAL_LABELS[values.BridalType] ?? "—"}
+                        </DetailLine>
+                        <DetailLine label="Location">
+                          {LOCATION_LABELS[values.Location] ?? "—"}
+                        </DetailLine>
+                        <Grid item xs={12}>
+                          <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.25 }}>
+                            Address
+                          </Typography>
+                          <Typography variant="body2" sx={{ fontWeight: 500, whiteSpace: "pre-line" }}>
+                            {[values.ReservationDetails.AddressLine1, values.ReservationDetails.AddressLine2, values.ReservationDetails.AddressLine3]
+                              .filter(Boolean)
+                              .join("\n") || "—"}
                           </Typography>
                         </Grid>
-                        <Grid item xs={12} lg={6} mb={1}>
-                          <Field
-                            as={TextField}
-                            name="ReservationDetails.WeddingDayContactPerson"
-                            fullWidth
-                            placeholder="Contact Name"
-                            value={
-                              values.ReservationDetails.WeddingDayContactPerson
-                            }
-                          />
-                        </Grid>
-                        <Grid item xs={12} lg={6} mb={1}>
-                          <Field
-                            as={TextField}
-                            name="ReservationDetails.WeddingDayContactPersonNo"
-                            fullWidth
-                            type="number"
-                            value={
-                              values.ReservationDetails
-                                .WeddingDayContactPersonNo
-                            }
-                            placeholder="Contact No"
-                          />
-                        </Grid>
-                        <Grid item xs={12} mb={1}>
-                          <FormGroup>
-                            <FormControlLabel
-                              control={<Checkbox checked={isGoingAway} />}
-                              name="ReservationDetails.IsGoingAway"
-                              label="Going Away"
-                              onChange={(e) => setIsGoingAway(e.target.checked)}
-                            />
-                            <FormControlLabel
-                              control={<Checkbox checked={isHomeComing} />}
-                              name="ReservationDetails.IsHomeComing"
-                              label="Home Coming"
-                              onChange={(e) =>
-                                setIsHomeComing(e.target.checked)
-                              }
-                            />
-                          </FormGroup>
-                        </Grid>
+                        <DetailLine label="Wedding day contact">{values.ReservationDetails.WeddingDayContactPerson}</DetailLine>
+                        <DetailLine label="Wedding day contact no.">
+                          {values.ReservationDetails.WeddingDayContactPersonNo}
+                        </DetailLine>
+                        <DetailLine label="Going away">{isGoingAway ? "Yes" : "No"}</DetailLine>
+                        <DetailLine label="Home coming">{isHomeComing ? "Yes" : "No"}</DetailLine>
                         {isHomeComing ? (
                           <>
-                            <Grid item xs={12} lg={6} mb={1}>
-                              <Typography>Home Coming Date</Typography>
-                              <Field
-                                as={TextField}
-                                type="date"
-                                name="ReservationDetails.HomeComingDate"
-                                value={formatDate(values.ReservationDetails.HomeComingDate)}
-                                fullWidth
-                              />
-                            </Grid>
-                            <Grid item xs={12} lg={6} mb={1}>
-                              <Typography>Home Coming Venue</Typography>
-                              <Field
-                                as={TextField}
-                                name="ReservationDetails.HomeComingVenue"
-                                value={values.ReservationDetails.HomeComingVenue}
-                                fullWidth
-                              />
-                            </Grid>
-                            <Grid item xs={12} lg={6} mb={1}>
-                              <Typography>Home Coming Outfit</Typography>
-                              <Field
-                                as={TextField}
-                                name="ReservationDetails.HomeComingOutfit"
-                                value={values.ReservationDetails.HomeComingOutfit}
-                                fullWidth
-                              />
-                            </Grid>
-                            <Grid item xs={12} lg={6} mb={1}>
-                              <Typography>Home Coming Outfit By</Typography>
-                              <Field
-                                as={TextField}
-                                name="ReservationDetails.HomeComingOutfitBy"
-                                value={values.ReservationDetails.HomeComingOutfitBy}
-                                fullWidth
-                              />
-                            </Grid>
-                            <Grid item xs={12} lg={6} mb={1}>
-                              <Typography>Home Coming Preferred Time</Typography>
-                              <Field
-                                as={Select}
-                                fullWidth
-                                name="HomeComingPreferredTime"
-                                value={homeComingPreferedTimeValue}
-                                onChange={(e) => {
-                                  setFieldValue("HomeComingPreferredTime", e.target.value);
-                                  setHomeComingPreferedTimeValue(e.target.value);
-                                }}
-                              >
-                                <MenuItem value={1}>Morning</MenuItem>
-                                <MenuItem value={2}>Evening</MenuItem>
-                              </Field>
-                            </Grid>
-                            <Grid item xs={12} lg={6} mb={1}>
-                              <Typography>Home Coming Bridal Type</Typography>
-                              <Field
-                                as={Select}
-                                name="HomeComingBridleType"
-                                fullWidth
-                                value={homeComingBridalTypeValue}
-                                onChange={(e) => {
-                                  setFieldValue("HomeComingBridleType", e.target.value);
-                                  setHomeComingBridalTypeValue(e.target.value);
-                                }}
-                              >
-                                <MenuItem value={1}>Kandyan</MenuItem>
-                                <MenuItem value={2}>Indian</MenuItem>
-                                <MenuItem value={3}>Western</MenuItem>
-                                <MenuItem value={4}>Hindu</MenuItem>
-                              </Field>
-                            </Grid>
-                            <Grid item xs={12} lg={6} mb={1}>
-                              <Typography>Home Coming Dressing Location</Typography>
-                              <Field
-                                as={Select}
-                                name="HomeComingLocation"
-                                fullWidth
-                                value={homeComingLocationValue}
-                                onChange={(e) => {
-                                  setFieldValue("HomeComingLocation", e.target.value);
-                                  setHomeComingLocationValue(e.target.value);
-                                }}
-                              >
-                                <MenuItem value={1}>Studio</MenuItem>
-                                <MenuItem value={2}>Away</MenuItem>
-                                <MenuItem value={3}>Overseas</MenuItem>
-                              </Field>
-                            </Grid>
+                            <DetailLine label="Home coming date">
+                              {formatDate(values.ReservationDetails.HomeComingDate) || "—"}
+                            </DetailLine>
+                            <DetailLine label="Home coming venue">
+                              {values.ReservationDetails.HomeComingVenue}
+                            </DetailLine>
+                            <DetailLine label="Home coming outfit">
+                              {values.ReservationDetails.HomeComingOutfit}
+                            </DetailLine>
+                            <DetailLine label="Home coming outfit by">
+                              {values.ReservationDetails.HomeComingOutfitBy}
+                            </DetailLine>
+                            <DetailLine label="Home coming preferred time">
+                              {PREFERRED_TIME_LABELS[homeComingPreferedTimeValue] ?? "—"}
+                            </DetailLine>
+                            <DetailLine label="Home coming bridal type">
+                              {BRIDAL_LABELS[homeComingBridalTypeValue] ?? "—"}
+                            </DetailLine>
+                            <DetailLine label="Home coming dressing location">
+                              {LOCATION_LABELS[homeComingLocationValue] ?? "—"}
+                            </DetailLine>
                           </>
-                        ) : (
-                          ""
-                        )}
+                        ) : null}
                         {isGoingAway ? (
-                          <Grid item xs={12} lg={6} mb={1}>
-                            <Typography>Going Away Dressing Venue</Typography>
-                            <Field
-                              as={TextField}
-                              name="ReservationDetails.GoingAwayDressingVenue"
-                              value={
-                                values.ReservationDetails.GoingAwayDressingVenue
-                              }
-                              fullWidth
-                            />
-                          </Grid>
-                        ) : (
-                          ""
-                        )}
-                        {isGoingAway ? (
-                          <Grid item xs={12} lg={6} mb={1}>
-                            <Typography>Going Away Outfit</Typography>
-                            <Field
-                              as={TextField}
-                              name="ReservationDetails.GoingAwayOutfit"
-                              value={values.ReservationDetails.GoingAwayOutfit}
-                              fullWidth
-                            />
-                          </Grid>
-                        ) : (
-                          ""
-                        )}
-                        {isGoingAway ? (
-                          <Grid item xs={12} lg={6} mb={1}>
-                            <Typography>Going Away Outfit By</Typography>
-                            <Field
-                              as={TextField}
-                              name="ReservationDetails.GoingAwayOutfitBy"
-                              value={
-                                values.ReservationDetails.GoingAwayOutfitBy
-                              }
-                              fullWidth
-                            />
-                          </Grid>
-                        ) : (
-                          ""
-                        )}
-                        <Grid
-                          item
-                          xs={12}
-                          lg={isGoingAway || isHomeComing ? 6 : 12}
-                          mb={1}
-                        >
-                          <Typography>Remark</Typography>
-                          <Field
-                            as={TextField}
-                            value={values.ReservationDetails.Remark}
-                            name="ReservationDetails.Remark"
-                            fullWidth
-                          />
+                          <>
+                            <DetailLine label="Going away dressing venue">
+                              {values.ReservationDetails.GoingAwayDressingVenue}
+                            </DetailLine>
+                            <DetailLine label="Going away outfit">
+                              {values.ReservationDetails.GoingAwayOutfit}
+                            </DetailLine>
+                            <DetailLine label="Going away outfit by">
+                              {values.ReservationDetails.GoingAwayOutfitBy}
+                            </DetailLine>
+                          </>
+                        ) : null}
+                        <Grid item xs={12}>
+                          <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.25 }}>
+                            Remark
+                          </Typography>
+                          <Typography variant="body2" sx={{ fontWeight: 500, whiteSpace: "pre-wrap" }}>
+                            {values.ReservationDetails.Remark?.trim() ? values.ReservationDetails.Remark : "—"}
+                          </Typography>
                         </Grid>
                       </Grid>
                     </TabPanel>
                     <TabPanel value={value} index={1} dir={theme.direction}>
-                      <Grid container spacing={1}>
-                        <Grid item xs={12} lg={6} mb={1}>
-                          <Typography>Groom's Outfit</Typography>
-                          <Field
-                            as={TextField}
-                            type="text"
-                            name="ReservationDetails.GroomsOutfit"
-                            vales={values.ReservationDetails.GroomsOutfit}
-                            fullWidth
-                          />
-                        </Grid>
-                        <Grid item xs={12} lg={6} mb={1}>
-                          <Typography>Groom's Outfit By</Typography>
-                          <Field
-                            as={TextField}
-                            type="text"
-                            name="ReservationDetails.GroomsOutfitBy"
-                            vales={values.ReservationDetails.GroomsOutfitBy}
-                            fullWidth
-                          />
-                        </Grid>
-                        <Grid item xs={12} lg={6} mb={1}>
-                          <Typography>Wed Outfit By</Typography>
-                          <Field
-                            as={TextField}
-                            type="text"
-                            name="ReservationDetails.WedOutfitBy"
-                            vales={values.ReservationDetails.WedOutfitBy}
-                            fullWidth
-                          />
-                        </Grid>
-
-                        <Grid item xs={12} lg={6} mb={1}>
-                          <Typography>F/G Outfit</Typography>
-                          <Field
-                            as={TextField}
-                            type="text"
-                            name="ReservationDetails.FGOutfit"
-                            vales={values.ReservationDetails.FGOutfit}
-                            fullWidth
-                          />
-                        </Grid>
-                        <Grid item xs={12} lg={6} mb={1}>
-                          <Typography>F/G Outfit By</Typography>
-                          <Field
-                            as={TextField}
-                            type="text"
-                            name="ReservationDetails.FGOutfitBy"
-                            vales={values.ReservationDetails.FGOutfitBy}
-                            fullWidth
-                          />
-                        </Grid>
-                        <Grid item xs={12} lg={6} mb={1}>
-                          <Typography>Maids Outfit By</Typography>
-                          <Field
-                            as={TextField}
-                            type="text"
-                            name="ReservationDetails.MaidsOutfitBy"
-                            vales={values.ReservationDetails.MaidsOutfitBy}
-                            fullWidth
-                          />
-                        </Grid>
-                        <Grid item xs={12} lg={6} mb={1}>
-                          <Typography>G/A Outfit By</Typography>
-                          <Field
-                            as={TextField}
-                            type="text"
-                            name="ReservationDetails.GAOutfitBy"
-                            vales={values.ReservationDetails.GAOutfitBy}
-                            fullWidth
-                          />
-                        </Grid>
-                        <Grid item xs={12} lg={6} mb={1}>
-                          <Typography>H/C Outfit By</Typography>
-                          <Field
-                            as={TextField}
-                            type="text"
-                            name="ReservationDetails.HCOutfitBy"
-                            vales={values.ReservationDetails.HCOutfitBy}
-                            fullWidth
-                          />
-                        </Grid>
-                        <Grid item xs={12} lg={6} mb={1}>
-                          <Typography>Bouquets By</Typography>
-                          <Field
-                            as={TextField}
-                            type="text"
-                            name="ReservationDetails.BouquetsBy"
-                            vales={values.ReservationDetails.BouquetsBy}
-                            fullWidth
-                          />
-                        </Grid>
-                        <Grid item xs={12} lg={6} mb={1}>
-                          <Typography>Photographer</Typography>
-                          <Field
-                            as={TextField}
-                            type="text"
-                            name="ReservationDetails.Photographer"
-                            vales={values.ReservationDetails.Photographer}
-                            fullWidth
-                          />
-                        </Grid>
-                        <Grid item xs={12} mb={1}>
-                          <Typography variant="h6" fontWeight="700">
+                      <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 2 }}>
+                        Outfit, accessories &amp; retinue
+                      </Typography>
+                      <Grid container spacing={2} rowSpacing={1.75}>
+                        <DetailLine label="Groom&apos;s outfit">{values.ReservationDetails.GroomsOutfit}</DetailLine>
+                        <DetailLine label="Groom&apos;s outfit by">{values.ReservationDetails.GroomsOutfitBy}</DetailLine>
+                        <DetailLine label="Wed outfit by">{values.ReservationDetails.WedOutfitBy}</DetailLine>
+                        <DetailLine label="F/G outfit">{values.ReservationDetails.FGOutfit}</DetailLine>
+                        <DetailLine label="F/G outfit by">{values.ReservationDetails.FGOutfitBy}</DetailLine>
+                        <DetailLine label="Maids outfit by">{values.ReservationDetails.MaidsOutfitBy}</DetailLine>
+                        <DetailLine label="G/A outfit by">{values.ReservationDetails.GAOutfitBy}</DetailLine>
+                        <DetailLine label="H/C outfit by">{values.ReservationDetails.HCOutfitBy}</DetailLine>
+                        <DetailLine label="Bouquets by">{values.ReservationDetails.BouquetsBy}</DetailLine>
+                        <DetailLine label="Photographer">{values.ReservationDetails.Photographer}</DetailLine>
+                        <Grid item xs={12}>
+                          <Typography variant="subtitle2" sx={{ mt: 0.5, mb: 0 }}>
                             Retinue
                           </Typography>
                         </Grid>
-                        <Grid item xs={12} lg={6} mb={1}>
-                          <Typography>Maids</Typography>
-                          <Field
-                            as={TextField}
-                            type="number"
-                            name="ReservationDetails.Maids"
-                            vales={values.ReservationDetails.Maids}
-                            fullWidth
-                          />
-                        </Grid>
-                        <Grid item xs={12} lg={6} mb={1}>
-                          <Typography>Flower Girls</Typography>
-                          <Field
-                            as={TextField}
-                            type="number"
-                            name="ReservationDetails.FlowerGirls"
-                            vales={values.ReservationDetails.FlowerGirls}
-                            fullWidth
-                          />
-                        </Grid>
-                        <Grid item xs={12} lg={6} mb={1}>
-                          <Typography>Little Maids</Typography>
-                          <Field
-                            as={TextField}
-                            type="number"
-                            name="ReservationDetails.LittleMaids"
-                            vales={values.ReservationDetails.LittleMaids}
-                            fullWidth
-                          />
-                        </Grid>
-                        <Grid item xs={12} lg={6} mb={1}>
-                          <Typography>Pupil Maids</Typography>
-                          <Field
-                            as={TextField}
-                            type="text"
-                            name="ReservationDetails.PupilMaids"
-                            vales={values.ReservationDetails.PupilMaids}
-                            fullWidth
-                          />
-                        </Grid>
+                        <DetailLine label="Maids">{values.ReservationDetails.Maids}</DetailLine>
+                        <DetailLine label="Flower girls">{values.ReservationDetails.FlowerGirls}</DetailLine>
+                        <DetailLine label="Little maids">{values.ReservationDetails.LittleMaids}</DetailLine>
+                        <DetailLine label="Pupil maids">{values.ReservationDetails.PupilMaids}</DetailLine>
                       </Grid>
                     </TabPanel>
                     <TabPanel value={value} index={2} dir={theme.direction}>
@@ -1216,7 +870,17 @@ export default function UpdateReservation({ reservation, fetchItems, approve1 })
                     </TabPanel>
                   </Box>
                 </Box>
-                <Box mt={2} display="flex" justifyContent="space-between">
+                <Box
+                  sx={{
+                    mt: "auto",
+                    pt: 2,
+                    flexShrink: 0,
+                    borderTop: 1,
+                    borderColor: "divider",
+                  }}
+                  display="flex"
+                  justifyContent="space-between"
+                >
                   <Button
                     variant="contained"
                     onClick={handleClose}
@@ -1229,7 +893,8 @@ export default function UpdateReservation({ reservation, fetchItems, approve1 })
                   </Button>
                 </Box>
               </Form>
-            )}
+              );
+            }}
           </Formik>
         </Box>
       </Modal>

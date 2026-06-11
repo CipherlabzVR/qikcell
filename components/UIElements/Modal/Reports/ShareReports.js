@@ -100,7 +100,7 @@ export default function ShareReports({
 
       try {
         setOpen(false);
-        const apiUrl = `https://api.textmebot.com/send.php?recipient=${formatNumber}&apikey=781LrdZkpdLh&document=${documentUrl}&text=${message}`;
+        const apiUrl = `${process.env.NEXT_PUBLIC_WHATSAPP_API_URL}?recipient=${formatNumber}&apikey=${process.env.NEXT_PUBLIC_WHATSAPP_API_KEY}&document=${documentUrl}&text=${message}`;
 
         const response = await fetch(apiUrl, {
           method: "GET",

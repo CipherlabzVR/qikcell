@@ -33,6 +33,7 @@ import {
 import BASE_URL from "Base/api";
 import { useRouter } from "next/router";
 import logoutUser from "@/components/utils/logoutUser";
+import { getDeviceId, resolveDeviceDisplayId } from "@/components/utils/getDeviceId";
 
 const validationSchema = Yup.object().shape({
   FirstName: Yup.string()
@@ -694,8 +695,12 @@ export default function EditUserDialog({ item, fetchItems, warehouses, roles }) 
                                   {device.isCurrentDevice ? "Current Device" : device.isActive ? "Active" : "Inactive"}
                                 </Alert>
                               </Box>
-                              <Typography variant="body2" color="text.secondary">
-                                IP Address: {device.ipAddress || "N/A"}
+                              <Typography
+                                variant="body2"
+                                color="text.secondary"
+                                sx={{ wordBreak: "break-all" }}
+                              >
+                                Device ID: {resolveDeviceDisplayId(device, getDeviceId())}
                               </Typography>
                               <Typography variant="body2" color="text.secondary">
                                 First Logged In: {formatDate(device.createdOn)}

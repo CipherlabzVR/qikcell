@@ -1,11 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
-  Pagination,
-  FormControl,
-  Typography,
-  InputLabel,
-  MenuItem,
-  Select,
   Accordion,
   AccordionDetails,
   AccordionSummary,
@@ -29,6 +23,7 @@ import { Search, StyledInputBase } from "@/styles/main/search-styles";
 import usePaginatedFetch from "@/components/hooks/usePaginatedFetch";
 
 import UnifiedSummaryReportModal from "@/components/UIElements/Modal/Reports/Summery/UnifiedSummaryReportModal";
+import MatrimonialSummaryReportModal from "@/components/UIElements/Modal/Reports/Summery/MatrimonialSummaryReportModal";
 import CompanyWiseProfit from "@/components/UIElements/Modal/Reports/Summery/CompanyWiseProfit";
 import ProfitabilityReport from "@/components/UIElements/Modal/Reports/Summery/ProfitabilityReport";
 import OutstandingReport from "@/components/UIElements/Modal/Reports/Summery/OutstandingReport";
@@ -56,6 +51,9 @@ const componentMap = {
   BankHistoryReport: UnifiedSummaryReportModal,
   ShiftSummaryReport: UnifiedSummaryReportModal,
   StockMovementReport: UnifiedSummaryReportModal,
+  MatrimonialProfileQualityReport: MatrimonialSummaryReportModal,
+  MatrimonialSubscriptionSummaryReport: MatrimonialSummaryReportModal,
+  MatrimonialEngagementSummaryReport: MatrimonialSummaryReportModal,
 };
 
 // Frontend-only categorization for Summary Reports.
@@ -89,6 +87,11 @@ const REPORT_MODULE_MAP = {
   ReservationAppointmentTypeReport: "Reservation",
   ReservationTypeReport: "Reservation",
   ReservationSalesReport: "Reservation",
+
+  // Matrimonial
+  MatrimonialProfileQualityReport: "Matrimonial",
+  MatrimonialSubscriptionSummaryReport: "Matrimonial",
+  MatrimonialEngagementSummaryReport: "Matrimonial",
 };
 
 const getReportModuleName = (report) => {
@@ -104,6 +107,7 @@ const getReportModuleName = (report) => {
     // Force all incoming categories/modules into the 3 requested groups.
     if (norm.includes("invent") || norm.includes("stock") || norm.includes("purchase")) return "Inventory";
     if (norm.includes("reservation")) return "Reservation";
+    if (norm.includes("matrimonial")) return "Matrimonial";
     if (norm.includes("sale") || norm.includes("customer")) return "Sales";
     if (norm.includes("finan") || norm.includes("cash") || norm.includes("bank") || norm.includes("profit") || norm.includes("fiscal") || norm.includes("shift")) return "Finance";
     // Unknown explicit module -> keep visible under Sales by default.
@@ -117,40 +121,31 @@ const getReportModuleName = (report) => {
   return "Sales";
 };
 
+/** Load all enabled summary reports in one request (no UI pagination). */
+const SUMMARY_REPORTS_FETCH_SIZE = 10000;
+
 const SummeryReports = () => {
   const [role, setRole] = useState(null);
   const [expandedModule, setExpandedModule] = useState(null);
 
   const {
     data: reports,
-    totalCount,
-    page,
-    pageSize,
     search,
-    setPage,
-    setPageSize,
     setSearch,
     fetchData: fetchReports,
     loading,
     error,
-  } = usePaginatedFetch(role ? `ReportSetting/GetAllEnabledSummaryReportsByRoleIdPage?roleId=${role}` : null, "", 10, false, false);
+  } = usePaginatedFetch(
+    role ? `ReportSetting/GetAllEnabledSummaryReportsByRoleIdPage?roleId=${role}` : null,
+    "",
+    SUMMARY_REPORTS_FETCH_SIZE,
+    false,
+    false
+  );
 
   const handleSearchChange = (event) => {
     setSearch(event.target.value);
-    fetchReports(1, event.target.value, pageSize);
-    setPage(1);
-  };
-
-  const handlePageChange = (event, value) => {
-    setPage(value);
-    fetchReports(value, search, pageSize);
-  };
-
-  const handlePageSizeChange = (event) => {
-    const size = event.target.value;
-    setPageSize(size);
-    setPage(1);
-    fetchReports(1, search, size);
+    fetchReports(1, event.target.value, SUMMARY_REPORTS_FETCH_SIZE);
   };
 
   useEffect(() => {
@@ -194,7 +189,8 @@ const SummeryReports = () => {
       return acc;
     }, {});
 
-    const preferredOrder = ["Inventory", "Sales", "Finance", "Reservation"];
+    // Keep a consistent module ordering (as requested).
+    const preferredOrder = ["Inventory", "Sales", "Finance", "Reservation", "Matrimonial"];
     
     const modulesWithReports = Object.keys(groups).filter(
       (moduleName) => groups[moduleName] && groups[moduleName].length > 0
@@ -304,9 +300,7 @@ const SummeryReports = () => {
                         <TableBody>
                           {moduleReports.map((report, index) => (
                             <TableRow key={report.id || `${moduleName}-${index}`}>
-                              <TableCell>
-                                {(page - 1) * pageSize + index + 1}
-                              </TableCell>
+                              <TableCell>{index + 1}</TableCell>
                               <TableCell>{report.title || report.name}</TableCell>
                               <TableCell align="right">{report.component}</TableCell>
                             </TableRow>
@@ -319,27 +313,6 @@ const SummeryReports = () => {
               ))}
             </>
           )}
-          <Grid container justifyContent="space-between" mt={2} mb={2}>
-            <Pagination
-              count={totalCount ? Math.ceil(totalCount / pageSize) : 1}
-              page={page}
-              onChange={handlePageChange}
-              color="primary"
-              shape="rounded"
-            />
-            <FormControl size="small" sx={{ mr: 2, width: "100px" }}>
-              <InputLabel>Page Size</InputLabel>
-              <Select
-                value={pageSize}
-                label="Page Size"
-                onChange={handlePageSizeChange}
-              >
-                <MenuItem value={5}>5</MenuItem>
-                <MenuItem value={10}>10</MenuItem>
-                <MenuItem value={25}>25</MenuItem>
-              </Select>
-            </FormControl>
-          </Grid>
         </Grid>
       </Grid>
     </>

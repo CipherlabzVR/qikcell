@@ -34,6 +34,7 @@ import PeopleAltOutlinedIcon from "@mui/icons-material/PeopleAltOutlined";
 import QueryStatsOutlinedIcon from "@mui/icons-material/QueryStatsOutlined";
 import ShoppingBagOutlinedIcon from "@mui/icons-material/ShoppingBagOutlined";
 import SellOutlinedIcon from "@mui/icons-material/SellOutlined";
+import CancelOutlinedIcon from "@mui/icons-material/CancelOutlined";
 import {
   Bar,
   BarChart,
@@ -135,14 +136,23 @@ function filterOrdersInRange(orders, rangeStart, rangeEnd) {
   });
 }
 
+/** Cancelled orders never counted toward revenue, AOV or completion. */
+function isRevenueOrder(o) {
+  return o && o.statusValue !== 6;
+}
+
 function sumNetTotal(orders) {
-  return orders.reduce((s, o) => s + (Number(o.netTotal) || 0), 0);
+  return orders.reduce(
+    (s, o) => s + (isRevenueOrder(o) ? Number(o.netTotal) || 0 : 0),
+    0
+  );
 }
 
 function completionRatePercent(orders) {
-  if (!orders.length) return 0;
-  const done = orders.filter((o) => o.statusValue === 5).length;
-  return (done / orders.length) * 100;
+  const eligible = orders.filter(isRevenueOrder);
+  if (!eligible.length) return 0;
+  const done = eligible.filter((o) => o.statusValue === 5).length;
+  return (done / eligible.length) * 100;
 }
 
 function buildLastNDaysSparkline(orders, nDays, endDate) {
@@ -158,6 +168,7 @@ function buildLastNDaysSparkline(orders, nDays, endDate) {
   const map = Object.fromEntries(keys.map((k) => [k, { revenue: 0, orders: 0 }]));
   orders.forEach((o) => {
     if (!o.createdOn) return;
+    if (!isRevenueOrder(o)) return;
     const k = dateKeyLocal(o.createdOn);
     if (map[k]) {
       map[k].revenue += Number(o.netTotal) || 0;
@@ -184,6 +195,7 @@ const ORDER_STATUS_NAME_TO_NUM = {
   dispatched: 3,
   delivered: 4,
   completed: 5,
+  cancelled: 6,
 };
 
 function normalizeEnumKey(raw) {
@@ -196,15 +208,35 @@ function normalizeEnumKey(raw) {
 function parseOrderStatus(raw) {
   if (raw == null || raw === "") return NaN;
   if (typeof raw === "number" && Number.isFinite(raw)) {
-    return raw >= 1 && raw <= 5 ? raw : NaN;
+    return raw >= 1 && raw <= 6 ? raw : NaN;
   }
   if (typeof raw === "string") {
     const n = Number(raw);
-    if (Number.isFinite(n) && n >= 1 && n <= 5) return n;
+    if (Number.isFinite(n) && n >= 1 && n <= 6) return n;
     const key = normalizeEnumKey(raw);
     if (ORDER_STATUS_NAME_TO_NUM[key] != null) return ORDER_STATUS_NAME_TO_NUM[key];
   }
   return NaN;
+}
+
+const REFUND_STATUS_NAME_TO_NUM = {
+  notapplicable: 0,
+  pending: 1,
+  processing: 2,
+  completed: 3,
+  failed: 4,
+};
+
+function parseRefundStatus(raw) {
+  if (raw == null || raw === "") return 0;
+  if (typeof raw === "number" && Number.isFinite(raw)) return raw;
+  if (typeof raw === "string") {
+    const n = Number(raw);
+    if (Number.isFinite(n)) return n;
+    const key = normalizeEnumKey(raw);
+    if (REFUND_STATUS_NAME_TO_NUM[key] != null) return REFUND_STATUS_NAME_TO_NUM[key];
+  }
+  return 0;
 }
 
 const STATUS_LABELS = {
@@ -213,15 +245,17 @@ const STATUS_LABELS = {
   3: "Dispatched",
   4: "Delivered",
   5: "Completed",
+  6: "Cancelled",
 };
 
-/** Distinct bar colors per `ECommerceOrderStatus` (1–5). */
+/** Distinct bar colors per `ECommerceOrderStatus` (1–6). */
 const STATUS_BAR_COLORS = {
   1: "#607d8b",
   2: "#0288d1",
   3: "#ed6c02",
   4: "#7b1fa2",
   5: "#2e7d32",
+  6: "#c62828",
 };
 
 function buildListUrl(endpoint, skip, max, extra = {}) {
@@ -315,6 +349,7 @@ function normalizeOrderLines(raw) {
 function aggregateTopProducts(orders, limit = 10) {
   const map = new Map();
   for (const order of orders) {
+    if (!isRevenueOrder(order)) continue;
     if (!Array.isArray(order.lines)) continue;
     for (const line of order.lines) {
       if (!line) continue;
@@ -341,6 +376,7 @@ function aggregateTopProducts(orders, limit = 10) {
 function aggregateTopCategories(orders, limit = 6) {
   const map = new Map();
   for (const order of orders) {
+    if (!isRevenueOrder(order)) continue;
     if (!Array.isArray(order.lines)) continue;
     for (const line of order.lines) {
       if (!line) continue;
@@ -373,7 +409,7 @@ function startOfWeekSunday(d) {
  * Revenue overview series for the global date range + Daily / Weekly / Monthly toggle.
  */
 function buildRevenueOverviewSeries(mode, start, end, orders) {
-  const list = filterOrdersInRange(orders, start, end);
+  const list = filterOrdersInRange(orders, start, end).filter(isRevenueOrder);
   const byDay = new Map();
   list.forEach((o) => {
     if (!o.createdOn) return;
@@ -449,6 +485,10 @@ function normalizeOrder(row) {
     row.NetTotal ??
     row.net_total ??
     0;
+  const cancellation = row.cancellation ?? row.Cancellation ?? null;
+  const refundStatus = cancellation
+    ? parseRefundStatus(cancellation.refundStatus ?? cancellation.RefundStatus)
+    : 0;
   return {
     orderId: row.orderId ?? row.OrderId,
     orderNo: row.orderNo ?? row.OrderNo ?? "",
@@ -461,6 +501,8 @@ function normalizeOrder(row) {
         ? STATUS_LABELS[statusValue]
         : "—",
     lines: normalizeOrderLines(row.lines ?? row.Lines ?? []),
+    cancellation,
+    refundStatus,
   };
 }
 
@@ -494,6 +536,13 @@ export default function EcommerceDashboard() {
     3: 0,
     4: 0,
     5: 0,
+    6: 0,
+  });
+  const [cancelledStats, setCancelledStats] = useState({
+    countInPeriod: 0,
+    netTotalInPeriod: 0,
+    refundPending: 0,
+    refundCompleted: 0,
   });
   const [recentOrders, setRecentOrders] = useState([]);
   /** Period KPIs + 30d sparklines (from batched order sample). */
@@ -569,6 +618,7 @@ export default function EcommerceDashboard() {
         c3,
         c4,
         c5,
+        c6,
         customersMeta,
         promotionsMeta,
       ] = await Promise.all([
@@ -578,6 +628,7 @@ export default function EcommerceDashboard() {
         fetchPaged("ECommerce/GetAllOnlineOrders", 0, 1, token, { OrderStatus: 3 }),
         fetchPaged("ECommerce/GetAllOnlineOrders", 0, 1, token, { OrderStatus: 4 }),
         fetchPaged("ECommerce/GetAllOnlineOrders", 0, 1, token, { OrderStatus: 5 }),
+        fetchPaged("ECommerce/GetAllOnlineOrders", 0, 1, token, { OrderStatus: 6 }),
         fetchPaged("ECommerce/GetAllECommerceCustomers", 0, 1, token),
         fetchPaged("ECommerce/GetAllPromotions", 0, 1, token),
       ]);
@@ -594,6 +645,7 @@ export default function EcommerceDashboard() {
         3: c3.totalCount,
         4: c4.totalCount,
         5: c5.totalCount,
+        6: c6.totalCount,
       });
 
       const currentList = filterOrdersInRange(normalizedOrders, start, end);
@@ -642,6 +694,20 @@ export default function EcommerceDashboard() {
       setTopProducts(aggregateTopProducts(currentList, 10));
       setTopCategories(aggregateTopCategories(currentList, 7));
 
+      const cancelledInPeriod = currentList.filter((o) => o.statusValue === 6);
+      setCancelledStats({
+        countInPeriod: cancelledInPeriod.length,
+        netTotalInPeriod: cancelledInPeriod.reduce(
+          (s, o) => s + (Number(o.netTotal) || 0),
+          0
+        ),
+        refundPending: cancelledInPeriod.filter(
+          (o) => o.refundStatus === 1 || o.refundStatus === 2
+        ).length,
+        refundCompleted: cancelledInPeriod.filter((o) => o.refundStatus === 3)
+          .length,
+      });
+
       const sorted = [...normalizedOrders].sort((a, b) => {
         const ta = a.createdOn ? a.createdOn.getTime() : 0;
         const tb = b.createdOn ? b.createdOn.getTime() : 0;
@@ -663,7 +729,7 @@ export default function EcommerceDashboard() {
 
   const chartData = useMemo(
     () =>
-      [1, 2, 3, 4, 5].map((k) => ({
+      [1, 2, 3, 4, 5, 6].map((k) => ({
         name: STATUS_LABELS[k],
         orders: statusCounts[k] ?? 0,
         statusKey: k,
@@ -717,6 +783,10 @@ export default function EcommerceDashboard() {
     },
   ];
 
+  const cancellationRatePct = totalOrdersAllTime
+    ? ((statusCounts[6] / totalOrdersAllTime) * 100).toFixed(1)
+    : "0.0";
+
   const spotlightCards = [
     {
       title: "Backlog to process",
@@ -739,9 +809,20 @@ export default function EcommerceDashboard() {
       color: "#2e7d32",
       icon: <DoneAllOutlinedIcon fontSize="small" />,
     },
+    {
+      title: "Cancelled orders",
+      value: statusCounts[6],
+      description:
+        `${cancellationRatePct}% of all orders were cancelled. ` +
+        (cancelledStats.refundPending > 0
+          ? `${cancelledStats.refundPending} refund${cancelledStats.refundPending === 1 ? "" : "s"} pending in this period.`
+          : `${cancelledStats.countInPeriod} cancelled in the selected period.`),
+      color: "#c62828",
+      icon: <CancelOutlinedIcon fontSize="small" />,
+    },
   ];
 
-  const statusSummary = [1, 2, 3, 4, 5].map((key) => ({
+  const statusSummary = [1, 2, 3, 4, 5, 6].map((key) => ({
     key,
     label: STATUS_LABELS[key],
     value: statusCounts[key] ?? 0,
@@ -995,7 +1076,7 @@ export default function EcommerceDashboard() {
 
       <Grid container spacing={2}>
         {spotlightCards.map((card) => (
-          <Grid item xs={12} md={4} key={card.title}>
+          <Grid item xs={12} sm={6} md={3} key={card.title}>
             <Paper
               elevation={0}
               sx={{

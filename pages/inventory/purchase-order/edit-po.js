@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Grid from "@mui/material/Grid";
 import {
   Box,
@@ -43,6 +43,28 @@ const POEdit = () => {
 
   const { data: IsEnableCreditGRN } =
     IsAppSettingEnabled("IsEnableCreditGRN");
+
+  const { data: AllowCostLessThanSelling } = IsAppSettingEnabled(
+    "AllowCostLessThanSelling"
+  );
+
+  const { data: IsProfitVisibleOnGRNAndPO } = IsAppSettingEnabled(
+    "IsProfitVisibleOnGRNAndPO"
+  );
+
+  const calculateProfit = (sellingPrice, costPrice) => {
+    const sp = parseFloat(sellingPrice);
+    const cp = parseFloat(costPrice);
+    if (Number.isNaN(sp) || Number.isNaN(cp)) return 0;
+    return sp - cp;
+  };
+
+  const calculateProfitMargin = (sellingPrice, costPrice) => {
+    const sp = parseFloat(sellingPrice);
+    const cp = parseFloat(costPrice);
+    if (Number.isNaN(sp) || Number.isNaN(cp) || sp <= 0) return 0;
+    return ((sp - cp) / sp) * 100;
+  };
 
   const fetchPOTally = async () => {
     try {
@@ -143,6 +165,39 @@ const POEdit = () => {
   const poType = po?.type ?? po?.purchasingOrderType;
   const isLocalPO = poType == 1;
 
+  /** Qty basis for line gross and discount. Import PO must use received qty, not ordered (poQty / line Qty). */
+  const getLineQtyForDiscount = (row) => {
+    if (!isLocalPO) {
+      const received =
+        parseFloat(row.poReceivedQty) || parseFloat(row.receivedQty) || 0;
+      return received;
+    }
+    return parseFloat(row.poReceivedQty) || 0;
+  };
+
+  const computeLineFinancials = (row) => {
+    const costPrice = parseFloat(row.costPrice) || 0;
+    const qty = getLineQtyForDiscount(row);
+    const gross = costPrice * qty;
+
+    const discountInput = parseFloat(row.discountInput) || 0;
+    const isPercentage = row.discountType === "percentage";
+
+    let discountAmount = isPercentage
+      ? (gross * discountInput) / 100
+      : discountInput;
+
+    if (discountAmount < 0) discountAmount = 0;
+    if (discountAmount > gross) discountAmount = gross;
+
+    return {
+      discountRate: isPercentage ? discountInput : 0,
+      discountAmount: discountAmount.toFixed(2),
+      lineGrossTot: gross.toFixed(2),
+      lineTot: (gross - discountAmount).toFixed(2),
+    };
+  };
+
   const handleInputChange = (index, field, value) => {
     const updatedRows = selectedRows.map((row, i) => {
       if (i !== index) return row;
@@ -151,9 +206,19 @@ const POEdit = () => {
       if (isLocalPO && ["avgUnitPrice", "avgFreighCost", "poReceivedQty"].includes(field)) {
         const unitPrice = parseFloat(updated.avgUnitPrice) || 0;
         const freightCost = parseFloat(updated.avgFreighCost) || 0;
-        const receivedQty = parseFloat(updated.poReceivedQty) || 0;
         updated.costPrice = (unitPrice + freightCost).toFixed(2);
-        updated.lineTot = ((unitPrice + freightCost) * receivedQty).toFixed(2);
+      }
+
+      if (
+        [
+          "avgUnitPrice",
+          "avgFreighCost",
+          "poReceivedQty",
+          "discountInput",
+          "discountType",
+        ].includes(field)
+      ) {
+        Object.assign(updated, computeLineFinancials(updated));
       }
 
       return updated;
@@ -164,21 +229,27 @@ const POEdit = () => {
   useEffect(() => {
     if (po) {
       const updatedRows = po.goodReceivedNoteLineDetails.map((row) => {
+        const dbDiscountRate = parseFloat(row.discountRate) || 0;
+        const dbDiscountAmount = parseFloat(row.discountAmount) || 0;
+        const discountType = dbDiscountRate > 0 ? "percentage" : "value";
+        const discountInput = dbDiscountRate > 0 ? dbDiscountRate : dbDiscountAmount;
+
         if ((po.type ?? po.purchasingOrderType) == 1) {
           const unitPrice = parseFloat(row.unitPrice) || 0;
           const additionalCost = parseFloat(row.additionalCost) || 0;
           const costPrice = unitPrice + additionalCost;
           const receivedQty = parseFloat(row.qty) || 0;
-          const lineTot = costPrice * receivedQty;
 
-          return {
+          const baseRow = {
             ...row,
             avgUnitPrice: unitPrice.toFixed(2),
             avgFreighCost: additionalCost.toFixed(2),
             costPrice: costPrice.toFixed(2),
             poReceivedQty: receivedQty,
-            lineTot: lineTot.toFixed(2),
+            discountType,
+            discountInput,
           };
+          return { ...baseRow, ...computeLineFinancials(baseRow) };
         }
 
         const matchedItem = poTallyList.find(
@@ -192,17 +263,20 @@ const POEdit = () => {
         const avgFreighCost = !isFinite(rawFreightCost) ? 0 : rawFreightCost;
 
         const costPrice = avgUnitPrice + avgFreighCost;
-        const poReceivedQty = matchedItem ? matchedItem.poReceivedQty : 0;
-        const lineTot = costPrice.toFixed(2) * poReceivedQty;
+        const poReceivedQty = matchedItem
+          ? matchedItem.poReceivedQty
+          : parseFloat(row.receivedQty) || 0;
 
-        return {
+        const baseRow = {
           ...row,
           avgUnitPrice: avgUnitPrice.toFixed(2),
           avgFreighCost: avgFreighCost.toFixed(2),
           costPrice: costPrice.toFixed(2),
           poReceivedQty,
-          lineTot: lineTot.toFixed(2),
+          discountType,
+          discountInput,
         };
+        return { ...baseRow, ...computeLineFinancials(baseRow) };
       });
 
       setSelectedRows(updatedRows);
@@ -257,11 +331,30 @@ const POEdit = () => {
     const invalidRow = selectedRows.find(
       (row) =>
         parseFloat(row.sellingPrice) <= 0 ||
-        parseFloat(row.sellingPrice) <= parseFloat(row.costPrice)
+        (!AllowCostLessThanSelling &&
+          parseFloat(row.sellingPrice) <= parseFloat(row.costPrice))
     );
-    
+
     if (invalidRow) {
       toast.info("Please Enter Selling Price greater than Cost Price.");
+      return;
+    }
+
+    const invalidDiscount = selectedRows.find((row) => {
+      const discountInput = parseFloat(row.discountInput) || 0;
+      if (discountInput < 0) return true;
+      if (row.discountType === "percentage" && discountInput > 100) return true;
+      const gross =
+        (parseFloat(row.costPrice) || 0) * getLineQtyForDiscount(row);
+      const discountAmount =
+        row.discountType === "percentage"
+          ? (gross * discountInput) / 100
+          : discountInput;
+      return discountAmount > gross;
+    });
+
+    if (invalidDiscount) {
+      toast.info("Discount cannot exceed the line total (or 100%).");
       return;
     }
 
@@ -271,7 +364,7 @@ const POEdit = () => {
       SupplierCode: "0",
       SupplierName: po.supplierName,
       ReferanceNo: po.referanceNo,
-      GRNDate: po.grnDate,
+      GRNDate: po.grnDate ?? po.poDate,
       Remark: po.remark,
       WarehouseId: po.warehouseId,
       WarehouseCode: po.warehouseCode,
@@ -299,6 +392,8 @@ const POEdit = () => {
         CostPrice: row.costPrice,
         SellingPrice: row.sellingPrice,
         MaximumSellingPrice: row.maxSellingPrice,
+        Profit: calculateProfit(row.sellingPrice, row.costPrice),
+        ProfitMargin: calculateProfitMargin(row.sellingPrice, row.costPrice),
         Qty: row.poReceivedQty,
         Free: row.free,
         DiscountRate: row.discountRate,
@@ -351,6 +446,15 @@ const POEdit = () => {
     );
     setGrossTotal(gross);
   }, [selectedRows]);
+
+  const totalLineDiscount = useMemo(
+    () =>
+      selectedRows.reduce(
+        (sum, row) => sum + (parseFloat(row.discountAmount) || 0),
+        0
+      ),
+    [selectedRows]
+  );
 
   return (
     <>
@@ -436,7 +540,7 @@ const POEdit = () => {
                 sx={{ width: "60%" }}
                 size="small"
                 fullWidth
-                value={po && po.referenceNo}
+                value={po && (po.referanceNo ?? po.referenceNo ?? "")}
               />
             </Grid>
             <Grid
@@ -465,7 +569,12 @@ const POEdit = () => {
                 size="small"
                 type="date"
                 fullWidth
-                value={po && po.poDate.substring(0, 10)}
+                value={
+                  po &&
+                  (po.grnDate || po.poDate
+                    ? String(po.grnDate || po.poDate).substring(0, 10)
+                    : "")
+                }
               />
             </Grid>
             <Grid
@@ -573,6 +682,14 @@ const POEdit = () => {
                       <TableCell sx={{ color: "#fff" }}>
                         Selling&nbsp;Price
                       </TableCell>
+                      {IsProfitVisibleOnGRNAndPO && (
+                        <>
+                          <TableCell sx={{ color: "#fff" }}>Profit</TableCell>
+                          <TableCell sx={{ color: "#fff" }}>
+                            Profit&nbsp;Margin&nbsp;(%)
+                          </TableCell>
+                        </>
+                      )}
                       <TableCell sx={{ color: "#fff" }}>Discount</TableCell>
                       <TableCell sx={{ color: "#fff" }}>Status</TableCell>
                       <TableCell sx={{ color: "#fff" }}>Remark</TableCell>
@@ -682,21 +799,57 @@ const POEdit = () => {
                             }
                           />
                         </TableCell>
+                        {IsProfitVisibleOnGRNAndPO && (
+                          <>
+                            <TableCell sx={{ p: 1 }}>
+                              {formatCurrency(
+                                calculateProfit(row.sellingPrice, row.costPrice)
+                              )}
+                            </TableCell>
+                            <TableCell sx={{ p: 1 }}>
+                              {calculateProfitMargin(
+                                row.sellingPrice,
+                                row.costPrice
+                              ).toFixed(2)}
+                            </TableCell>
+                          </>
+                        )}
                         <TableCell sx={{ p: 1 }}>
-                          <TextField
-                            size="small"
-                            type="number"
-                            fullWidth
-                            sx={{ width: "150px" }}
-                            value={row.discountAmount === 0 || row.discountAmount === null || row.discountAmount === undefined ? "" : row.discountAmount}
-                            onChange={(e) =>
-                              handleInputChange(
-                                index,
-                                "discountAmount",
-                                e.target.value
-                              )
-                            }
-                          />
+                          <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
+                            <Select
+                              size="small"
+                              value={row.discountType || "value"}
+                              onChange={(e) =>
+                                handleInputChange(index, "discountType", e.target.value)
+                              }
+                              sx={{ width: "85px" }}
+                            >
+                              <MenuItem value="value">Value</MenuItem>
+                              <MenuItem value="percentage">%</MenuItem>
+                            </Select>
+                            <TextField
+                              size="small"
+                              type="number"
+                              sx={{ width: "110px" }}
+                              inputProps={{
+                                min: 0,
+                                max:
+                                  row.discountType === "percentage" ? 100 : undefined,
+                                step: "0.01",
+                              }}
+                              value={
+                                row.discountInput === 0 ||
+                                row.discountInput === null ||
+                                row.discountInput === undefined ||
+                                row.discountInput === ""
+                                  ? ""
+                                  : row.discountInput
+                              }
+                              onChange={(e) =>
+                                handleInputChange(index, "discountInput", e.target.value)
+                              }
+                            />
+                          </Box>
                         </TableCell>
                         <TableCell sx={{ p: 1 }}>
                           <Select
@@ -726,12 +879,28 @@ const POEdit = () => {
                           />
                         </TableCell>
                         <TableCell align="right" sx={{ p: 1 }}>
-                          {formatCurrency(row.lineTot)}
+                          {formatCurrency(row.lineGrossTot)}
                         </TableCell>
                       </TableRow>
                     ))}
                     <TableRow>
-                      <TableCell colSpan={13} align="right">
+                      <TableCell
+                        colSpan={13 + (IsProfitVisibleOnGRNAndPO ? 2 : 0)}
+                        align="right"
+                      >
+                        <Typography variant="h6">Discount</Typography>
+                      </TableCell>
+                      <TableCell colSpan={14} align="right">
+                        <Typography variant="h6">
+                          {formatCurrency(totalLineDiscount)}
+                        </Typography>
+                      </TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell
+                        colSpan={13 + (IsProfitVisibleOnGRNAndPO ? 2 : 0)}
+                        align="right"
+                      >
                         <Typography variant="h6">Total</Typography>
                       </TableCell>
                       <TableCell colSpan={14} align="right">

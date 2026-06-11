@@ -49,6 +49,7 @@ export default function PromotionFormFields({ values, setFieldValue, errors, tou
         const raw = Array.isArray(data.result) ? data.result : [];
         if (cancelled) return;
         const normalized = raw
+          .filter((row) => !!(row.isWebView ?? row.IsWebView))
           .map((row) => ({
             id: row.id ?? row.Id,
             name: (row.name ?? row.Name ?? "").trim(),

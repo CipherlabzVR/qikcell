@@ -33,6 +33,10 @@ import {
   normalizePromotionCategoryKey,
 } from "@/components/eCommerce/promotions/promotionConfig";
 
+function extraQueryForPromotionStatusFilter(value) {
+  return value === "active" ? { ActivePromotionsOnly: true } : {};
+}
+
 export default function Promotions() {
   const [cId, setCId] = useState(null);
 
@@ -54,13 +58,27 @@ export default function Promotions() {
     setPage,
     setPageSize,
     setSearch,
+    setExtraQuery,
     fetchData,
   } = usePaginatedFetch("ECommerce/GetAllPromotions", "", 10, false, false);
 
+  const [statusFilter, setStatusFilter] = useState("all");
+
   const handleSearchChange = (event) => {
     setSearch(event.target.value);
-    fetchData(1, event.target.value, pageSize);
     setPage(1);
+    const nextExtra = extraQueryForPromotionStatusFilter(statusFilter);
+    setExtraQuery(nextExtra);
+    fetchData(1, event.target.value, pageSize, undefined, undefined, nextExtra);
+  };
+
+  const handleStatusFilterChange = (event) => {
+    const value = event.target.value;
+    setStatusFilter(value);
+    setPage(1);
+    const nextExtra = extraQueryForPromotionStatusFilter(value);
+    setExtraQuery(nextExtra);
+    fetchData(1, search, pageSize, undefined, undefined, nextExtra);
   };
 
   const handlePageChange = (event, value) => {
@@ -135,11 +153,31 @@ export default function Promotions() {
         <Grid
           item
           xs={12}
-          lg={8}
+          lg={3}
+          order={{ xs: 3, lg: 2 }}
+          sx={{ display: "flex", alignItems: "center" }}
+        >
+          <FormControl size="small" fullWidth sx={{ maxWidth: { sm: 260 } }}>
+            <InputLabel id="promotion-status-filter-label">Show</InputLabel>
+            <Select
+              labelId="promotion-status-filter-label"
+              value={statusFilter}
+              label="Show"
+              onChange={handleStatusFilterChange}
+            >
+              <MenuItem value="all">All promotions</MenuItem>
+              <MenuItem value="active">Active (running now)</MenuItem>
+            </Select>
+          </FormControl>
+        </Grid>
+        <Grid
+          item
+          xs={12}
+          lg={5}
           mb={1}
           display="flex"
           justifyContent="end"
-          order={{ xs: 1, lg: 2 }}
+          order={{ xs: 1, lg: 3 }}
         >
           {create ? <AddPromotion fetchItems={fetchData} /> : ""}
         </Grid>

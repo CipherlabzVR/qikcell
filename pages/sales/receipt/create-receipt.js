@@ -16,6 +16,11 @@ import {
   Select,
   Box,
   MenuItem,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogContentText,
+  DialogActions,
 } from "@mui/material";
 import Link from "next/link";
 import styles from "@/styles/PageTitle.module.css";
@@ -64,6 +69,8 @@ const ReceiptCreate = () => {
   const [cashAmount, setCashAmount] = useState(0);
   const [cardAmount, setCardAmount] = useState(0);
   const [issubmitting, setIssubmitting] = useState(false);
+  const [overpayDialogOpen, setOverpayDialogOpen] = useState(false);
+  const [overpayExcess, setOverpayExcess] = useState(0);
   const guidRef = useRef(uuidv4());
   const { data: bankList } = useApi("/Bank/GetAllBanks");
   const { data: IsReceiptAllOutstandingView } = IsAppSettingEnabled("IsReceiptAllOutstandingView");
@@ -246,7 +253,25 @@ const ReceiptCreate = () => {
         return;
       }
     }
-    
+
+    // Detect overpayment: any line where the paying amount exceeds its outstanding (due) amount.
+    const rows = IsReceiptAllOutstandingView ? customerInvoices : selectedInvoicesList;
+    const excess = rows.reduce((sum, row) => {
+      const due = parseFloat(row.outstandingAmount || 0);
+      const paying = parseFloat(row.payingAmount || 0);
+      return sum + Math.max(0, paying - due);
+    }, 0);
+
+    if (excess > 0) {
+      setOverpayExcess(excess);
+      setOverpayDialogOpen(true);
+      return;
+    }
+
+    await submitReceipt(false);
+  };
+
+  const submitReceipt = async (storeOverpayment) => {
     const data = {
       ReceiptNumber: "R12345",
       ReceiptDate: receiptDate,
@@ -269,6 +294,7 @@ const ReceiptCreate = () => {
       ChequeNo: chequeNo,
       BankId: bankId,
       CardAmount : cardAmount || 0,
+      StoreOverpayment: storeOverpayment,
       ReceiptLineDetails: (IsReceiptAllOutstandingView ? customerInvoices : selectedInvoicesList).map((row) => ({
         InvoiceId: row.invoiceId,
         InvoiceNo: row.invoiceNumber,
@@ -314,6 +340,11 @@ const ReceiptCreate = () => {
     }
   };
 
+  const handleConfirmOverpayment = async () => {
+    setOverpayDialogOpen(false);
+    await submitReceipt(true);
+  };
+
   useEffect(() => {
     if (customerList) {
       setCustomers(customerList);
@@ -353,6 +384,25 @@ const ReceiptCreate = () => {
   return (
     <>
       <ToastContainer />
+      <Dialog open={overpayDialogOpen} onClose={() => setOverpayDialogOpen(false)}>
+        <DialogTitle>Overpayment Detected</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            The customer is paying {Number(overpayExcess).toFixed(2)} more than the
+            selected invoice due amount. Do you want to save the excess as an
+            overpayment credit that can be set off against outstanding invoices
+            later from the Customer Notes screen?
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOverpayDialogOpen(false)} color="inherit">
+            Cancel
+          </Button>
+          <Button onClick={handleConfirmOverpayment} variant="contained">
+            Save as Overpayment
+          </Button>
+        </DialogActions>
+      </Dialog>
       <div className={styles.pageTitle}>
         <h1>Receipt Create</h1>
         <ul>
@@ -608,6 +658,18 @@ const ReceiptCreate = () => {
 
 
             <Grid item xs={12} my={2}>
+              <Box display="flex" alignItems="center" gap={1} mb={1}>
+                <Box
+                  sx={{
+                    width: 14,
+                    height: 14,
+                    backgroundColor: "#fff8e1",
+                    border: "1px solid #d6c897",
+                    borderRadius: "2px",
+                  }}
+                />
+                <Typography variant="body2">Sales Order</Typography>
+              </Box>
               <TableContainer component={Paper}>
                 <Table
                   size="small"
@@ -622,6 +684,7 @@ const ReceiptCreate = () => {
                         align="center"
                       ></TableCell>
                       <TableCell sx={{ color: "#fff" }}>Invoice No.</TableCell>
+                      <TableCell sx={{ color: "#fff" }}>Order No.</TableCell>
                       {/* <TableCell sx={{ color: "#fff" }}>Reference No.</TableCell> */}
                       <TableCell sx={{ color: "#fff" }}>Total Amount</TableCell>
                       <TableCell sx={{ color: "#fff" }}>
@@ -645,7 +708,10 @@ const ReceiptCreate = () => {
                           : "N/A"; // You can replace 'N/A' with another default value if necessary
 
                       return (
-                        <TableRow key={index}>
+                        <TableRow
+                          key={index}
+                          sx={invoice.isSalesOrder ? { backgroundColor: "#fff8e1" } : undefined}
+                        >
                           <TableCell>{index + 1}</TableCell>
                           <TableCell align="center">
                             <Checkbox
@@ -659,7 +725,8 @@ const ReceiptCreate = () => {
                               }
                             />
                           </TableCell>
-                          <TableCell>{invoice.invoiceNumber}</TableCell>
+                          <TableCell>{invoice.isSalesOrder ? "-" : invoice.invoiceNumber}</TableCell>
+                          <TableCell>{invoice.isSalesOrder ? invoice.invoiceNumber : "-"}</TableCell>
                           <TableCell>{invoice.totalInvoiceAmount}</TableCell>
                           <TableCell>
                             {invoice.totalInvoiceAmount -

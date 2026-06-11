@@ -12,8 +12,10 @@ import { Visibility, VisibilityOff } from "@mui/icons-material";
 import { toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import BASE_URL from "Base/api";
+import { touchSessionActivity } from "@/components/utils/logoutUser";
 import { useRouter } from "next/router";
 import getDeviceName from "@/components/utils/getDeviceName";
+import { getDeviceIdentity } from "@/components/utils/getDeviceId";
 import DeviceNameDialog from "@/components/Authentication/DeviceNameDialog";
 
 const DrawerSignIn = () => {
@@ -64,6 +66,7 @@ const DrawerSignIn = () => {
         },
         body: JSON.stringify({
           ...formData,
+          Email: String(formData.Email ?? "").trim(),
           DeviceName: getDeviceName(),
         }),
       });
@@ -83,6 +86,9 @@ const DrawerSignIn = () => {
       localStorage.setItem("warehouse", result.warehouseId);
       localStorage.setItem("company", result.companyId);
       localStorage.setItem("role", result.userRole);
+
+      sessionStorage.setItem("justLoggedIn", "true");
+      touchSessionActivity();
 
       fetch(`${BASE_URL}/Company/CreateCompanyHostingFeeIfDue`, {
         method: "POST",
@@ -114,6 +120,7 @@ const DrawerSignIn = () => {
 
   const handleDeviceDialogCancel = () => {
     setDeviceDialogOpen(false);
+    touchSessionActivity();
     window.location.href = "/dashboard/reservation/";
   };
 
@@ -121,27 +128,65 @@ const DrawerSignIn = () => {
     const trimmed = deviceNameInput.trim();
     if (!trimmed || !loginResult) return;
 
+    const isRenameSuccess = (data) => {
+      const sc = data?.statusCode ?? data?.StatusCode;
+      return Number(sc) === 200;
+    };
+
+    const deviceRowId =
+      loginResult?.currentLoggedInDeviceId ?? loginResult?.CurrentLoggedInDeviceId ?? null;
+
     try {
+      const identity = await getDeviceIdentity();
+      const idQuery =
+        deviceRowId != null
+          ? `&loggedInDeviceIpId=${encodeURIComponent(String(deviceRowId))}`
+          : "";
       const response = await fetch(
-        `${BASE_URL}/User/RenameCurrentDevice?newDeviceName=${encodeURIComponent(trimmed)}`,
+        `${BASE_URL}/User/RenameCurrentDevice?newDeviceName=${encodeURIComponent(trimmed)}` +
+          `&deviceIdentifier=${encodeURIComponent(identity.deviceIdentifier || "")}` +
+          (identity.deviceFingerprint
+            ? `&deviceFingerprint=${encodeURIComponent(identity.deviceFingerprint)}`
+            : "") +
+          (identity.browserInstanceId
+            ? `&browserInstanceId=${encodeURIComponent(identity.browserInstanceId)}`
+            : "") +
+          idQuery,
         {
-          method: "PUT",
+          method: "POST",
+          credentials: "include",
           headers: {
             Authorization: `Bearer ${loginResult.accessToken}`,
             "Content-Type": "application/json",
+            ...(identity.deviceFingerprint
+              ? { "X-Device-Fingerprint": identity.deviceFingerprint }
+              : {}),
+            ...(identity.browserInstanceId
+              ? { "X-Browser-Instance-Id": identity.browserInstanceId }
+              : {}),
           },
-          body: JSON.stringify({ NewDeviceName: trimmed }),
+          body: JSON.stringify({
+            NewDeviceName: trimmed,
+            DeviceIdentifier: identity.deviceIdentifier,
+            DeviceId: identity.deviceIdentifier,
+            DeviceFingerprint: identity.deviceFingerprint,
+            BrowserInstanceId: identity.browserInstanceId,
+            ...(deviceRowId != null ? { LoggedInDeviceIpId: deviceRowId } : {}),
+          }),
         }
       );
       const data = await response.json().catch(() => ({}));
-      if (!response.ok || data?.statusCode !== 200) {
-        toast.error(data?.message || "Could not save device name. Please try again.");
-        return;
+      if (!response.ok || !isRenameSuccess(data)) {
+        toast.error(data?.message || "Could not save device name. You can continue anyway.");
       }
       setDeviceDialogOpen(false);
+      touchSessionActivity();
       window.location.href = "/dashboard/reservation/";
     } catch {
-      toast.error("Could not save device name. Please try again.");
+      toast.error("Could not save device name. You can continue anyway.");
+      setDeviceDialogOpen(false);
+      touchSessionActivity();
+      window.location.href = "/dashboard/reservation/";
     }
   };
 

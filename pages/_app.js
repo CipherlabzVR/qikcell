@@ -126,9 +126,10 @@ import { ThemeProvider, CssBaseline, CircularProgress } from "@mui/material";
 import Layout from "@/components/_App/Layout";
 import { useRouter } from "next/router";
 import { ProjectNo } from "Base/catelogue";
+import BASE_URL from "Base/api";
 import Calendar from "./reservation/calendar";
 import getSettingValueByName from "@/components/utils/getSettingValueByName";
-import logoutUser from "@/components/utils/logoutUser";
+import logoutUser, { touchSessionActivity } from "@/components/utils/logoutUser";
 
 
 const DEFAULT_INACTIVITY_TIMEOUT_MINUTES = 12 * 60;
@@ -172,11 +173,33 @@ function MyApp({ Component, pageProps }) {
 
   useEffect(() => {
     if (typeof window !== "undefined") {
-      const token = localStorage.getItem("token");
-      setToken(token);
+      const nextToken = localStorage.getItem("token");
+      setToken(nextToken);
+      if (nextToken && sessionStorage.getItem("justLoggedIn") === "true") {
+        touchSessionActivity();
+        sessionStorage.removeItem("justLoggedIn");
+      }
       const timeoutId = setTimeout(() => setHydrated(true), 100);
       return () => clearTimeout(timeoutId);
     }
+  }, []);
+
+  // Self-register this site's origin with the ERP backend so CORS allows it.
+  // Fires once per browser session; failures are ignored (origin may already exist).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const origin = window.location.origin;
+      const flagKey = `corsRegistered:${origin}`;
+      if (sessionStorage.getItem(flagKey) === "true") return;
+      fetch(`${BASE_URL}/AppSetting/SaveCorsLink`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ webLink: origin, isActive: true }),
+      })
+        .then(() => sessionStorage.setItem(flagKey, "true"))
+        .catch(() => {});
+    } catch (_) {}
   }, []);
 
   useEffect(() => {
@@ -218,6 +241,42 @@ function MyApp({ Component, pageProps }) {
     }
   }, [token]);
 
+  // Register this host with the ERP API CORS allowlist (SaveCorsLink). Once per tab session;
+  // uses window.location.origin — works on landing, sign-in, and inside the app after login.
+  useEffect(() => {
+    if (typeof window === "undefined" || !hydrated) {
+      return;
+    }
+
+    const appOrigin = window.location.origin;
+    if (!appOrigin) {
+      return;
+    }
+
+    const sessionKey = "__apexflowSaveCorsOrigin";
+    if (sessionStorage.getItem(sessionKey) === appOrigin) {
+      return;
+    }
+
+    fetch(`${BASE_URL}/AppSetting/SaveCorsLink`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        webLink: appOrigin,
+        isActive: true,
+      }),
+    })
+      .then((response) => response.json())
+      .then(() => {
+        sessionStorage.setItem(sessionKey, appOrigin);
+      })
+      .catch(() => {
+        // Non-blocking fire-and-forget so startup is never blocked.
+      });
+  }, [hydrated]);
+
   useEffect(() => {
     if (typeof window === "undefined") {
       return;
@@ -241,6 +300,12 @@ function MyApp({ Component, pageProps }) {
       if (inactivityTimerRef.current) {
         clearTimeout(inactivityTimerRef.current);
       }
+      return;
+    }
+
+    // Avoid evaluating stale idle timestamps before the shell has hydrated; otherwise
+    // a post-login full reload can clear the new session immediately.
+    if (!hydrated) {
       return;
     }
 
@@ -326,7 +391,7 @@ function MyApp({ Component, pageProps }) {
         inactivityTimerRef.current = null;
       }
     };
-  }, [handleForceLogout, markActivity, token, INACTIVITY_TIMEOUT_MS]);
+  }, [handleForceLogout, markActivity, token, INACTIVITY_TIMEOUT_MS, hydrated]);
 
 
   function clearLocalStorageDaily() {
@@ -355,7 +420,37 @@ function MyApp({ Component, pageProps }) {
     );
   }
 
-  if (token == null && landingVisible) {
+  // Exclude standalone print/share pages from layout and token check
+    const noLayoutRoutes = ["/crm/customer/quote", "/crm/customer/invoice", "/inventory/purchase-order/print", "/inventory/grn/print", "/inventory/shipment/print", "/inventory/stock-cycle-count/print", "/sales/sales-quotation/print", "/quotations/tech-pack/sewing/packing-print", "/quotations/tech-pack/sewing/emb-sub-print", "/quotations/tech-pack/sewing/cutting-print", "/verified", "/userverified", "/authentication/forgot-password", "/authentication/customer-sign-in", "/sales/sales-order/print", "/customer-portal"];
+  const shouldUseLayout = !noLayoutRoutes.includes(router.pathname) && !Component.disableLayout;
+  const shouldCheckToken = !noLayoutRoutes.includes(router.pathname);
+
+  // Customer portal users (UserType.EXTERNAL = 15): never paint the ERP layout/dashboard —
+  // show a spinner and go straight to the portal.
+  if (typeof window !== "undefined" && token) {
+    const userType = Number(localStorage.getItem("type"));
+    if (userType === 15 && router.pathname !== "/customer-portal") {
+      router.replace("/customer-portal");
+      return (
+        <ThemeProvider theme={theme}>
+          <CssBaseline />
+          <div
+            style={{
+              width: "100vw",
+              height: "100vh",
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "center",
+            }}
+          >
+            <CircularProgress />
+          </div>
+        </ThemeProvider>
+      );
+    }
+  }
+
+  if (token == null && landingVisible && shouldCheckToken) {
     return (
       <div className={`landing-page ${landingSlideUp ? "slide-up" : ""}`}>
         <div className="landing-content">
@@ -366,18 +461,13 @@ function MyApp({ Component, pageProps }) {
     );
   }
 
-  // Exclude standalone print/share pages from layout and token check
-  const noLayoutRoutes = ["/crm/customer/quote", "/crm/customer/invoice", "/inventory/purchase-order/print", "/inventory/grn/print", "/inventory/shipment/print", "/inventory/stock-cycle-count/print", "/quotations/tech-pack/sewing/packing-print", "/quotations/tech-pack/sewing/emb-sub-print", "/quotations/tech-pack/sewing/cutting-print", "/verified", "/userverified"];
-  const shouldUseLayout = !noLayoutRoutes.includes(router.pathname);
-  const shouldCheckToken = !noLayoutRoutes.includes(router.pathname);
-
   if (token == null && shouldCheckToken) {
     if (ProjectNo === 1) {
-      return <SignIn /> ;
-    } else {
-      return <Calendar />;
+      const portalCustomerLogin = router.pathname === "/authentication/customer-sign-in";
+      return <SignIn portalCustomerLogin={portalCustomerLogin} />;
     }
 
+    return <Calendar />;
   }
 
   return (
@@ -386,10 +476,10 @@ function MyApp({ Component, pageProps }) {
         <CssBaseline />
         {shouldUseLayout ? (
           <Layout>
-            <Component {...pageProps} />
+            <Component key={router.asPath} {...pageProps} />
           </Layout>
         ) : (
-          <Component {...pageProps} />
+          <Component key={router.asPath} {...pageProps} />
         )}
       </ThemeProvider>
     </>

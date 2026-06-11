@@ -26,8 +26,8 @@ import { useRouter } from "next/router";
 import { formatDate } from "@/components/utils/formatHelper";
 import { Search, StyledInputBase } from "@/styles/main/search-styles";
 import LocalPrintshopIcon from "@mui/icons-material/LocalPrintshop";
+import DescriptionIcon from "@mui/icons-material/Description";
 import GetReportSettingValueByName from "@/components/utils/GetReportSettingValueByName";
-import IsAppSettingEnabled from "@/components/utils/IsAppSettingEnabled";
 import { toast } from "react-toastify";
 import ShareReports from "@/components/UIElements/Modal/Reports/ShareReports";
 import usePaginatedFetch from "@/components/hooks/usePaginatedFetch";
@@ -40,10 +40,9 @@ import { Report } from "Base/report";
 export default function PurchaseOrder() {
   const name = localStorage.getItem("name");
   const cId = sessionStorage.getItem("category")
-  const { navigate, create, update, remove, print } = IsPermissionEnabled(cId);
+  const { navigate, create, update, remove, print, customPrint } = IsPermissionEnabled(cId);
   const router = useRouter();
   const { data: ReportName } = GetReportSettingValueByName("PurchaseOrder");
-  const { data: isCustomReportsEnabled } = IsAppSettingEnabled("IsCustomReportsEnabled");
   const { data: isFiscalPeriodAvailable } = IsFiscalPeriodAvailable();
 
   const navigateToCreate = () => {
@@ -199,25 +198,26 @@ export default function PurchaseOrder() {
                               </IconButton>
                             </Tooltip> : ""}
                             <ShareReports url={whatsapp} mobile={item.supplierMobileNo} />
-                            {isCustomReportsEnabled ? (
-                              print ? <Tooltip title="Print" placement="top">
+                            {customPrint ? (
+                              <Tooltip title="Print (Custom)" placement="top">
                                 <a href={`${Report}${reportLink}`} target="_blank" rel="noopener noreferrer">
-                                  <IconButton aria-label="print" size="small">
-                                    <LocalPrintshopIcon color="primary" fontSize="medium" />
+                                  <IconButton aria-label="print custom" size="small">
+                                    <DescriptionIcon color="action" fontSize="medium" />
                                   </IconButton>
                                 </a>
-                              </Tooltip> : ""
-                            ) : (
-                              print ? <Tooltip title="Print" placement="top">
+                              </Tooltip>
+                            ) : ""}
+                            {print ? (
+                              <Tooltip title="Print (Default)" placement="top">
                                 <IconButton
-                                  aria-label="print"
+                                  aria-label="print default"
                                   size="small"
                                   onClick={() => openPurchaseOrderPrintPopup(item)}
                                 >
                                   <LocalPrintshopIcon color="primary" fontSize="medium" />
                                 </IconButton>
-                              </Tooltip> : ""
-                            )}
+                              </Tooltip>
+                            ) : ""}
                           </Box>
                         </TableCell>
                       </TableRow>

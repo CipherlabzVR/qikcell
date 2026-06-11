@@ -7,7 +7,7 @@ import AddIcon from "@mui/icons-material/Add";
 import Grid from "@mui/material/Grid";
 import { Formik, Form, Field } from "formik";
 import * as Yup from "yup";
-import { toast, ToastContainer } from "react-toastify";
+import { toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import {
   Checkbox,
@@ -183,7 +183,6 @@ export default function AddUserDialog({ fetchItems, warehouses, roles }) {
 
   return (
     <>
-      <ToastContainer />
       <Button onClick={handleClickOpen("paper")} variant="outlined">
         <AddIcon
           sx={{
